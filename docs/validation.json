@@ -1,0 +1,78 @@
+{
+  "sample": "30108419.pdf",
+  "pages": 12,
+  "watermarks_removed": 12,
+  "unchanged_non_page_content_streams": 118,
+  "changed_non_page_content_streams": [],
+  "missing_non_page_content_streams": [],
+  "excluded_file_structure_container_xrefs": [
+    2,
+    348
+  ],
+  "page_stream_checks": [
+    {
+      "page": 1,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 2,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 3,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 4,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 5,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 6,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 7,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 8,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 9,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 10,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 11,
+      "only_expected_text_operand_changed": true
+    },
+    {
+      "page": 12,
+      "only_expected_text_operand_changed": true
+    }
+  ],
+  "metadata_equal": true,
+  "permissions_equal": true,
+  "automated_tests": "25 passed",
+  "gui_smoke": "Passed under Linux/Xvfb: open, analyze, render both panes, navigate, export PDF, export report, close",
+  "rendering": "All 12 original and output pages rendered using PDFium; GUI/engine also used MuPDF; output montage inspected",
+  "native_macos_tested": false,
+  "native_windows_tested": false,
+  "packaged_binaries_created": false,
+  "environment": {
+    "python": "3.13.5",
+    "platform": "Linux",
+    "pymupdf": "1.26.7",
+    "pypdf": "5.9.0"
+  },
+  "gui_target_change_invalidation": "Passed",
+  "cli_inspection": "Passed"
+}

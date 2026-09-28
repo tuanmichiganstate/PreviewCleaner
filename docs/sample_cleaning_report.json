@@ -1,0 +1,285 @@
+{
+  "app_version": "0.1.0",
+  "target": "Preview",
+  "page_count": 12,
+  "removed_count": 12,
+  "pages_changed": 12,
+  "unsupported_pages": [],
+  "input_sha256": "44e69d80688169213017708c6c4eb36bcc9c6e8d5bfe02aa015ca612f54b1d0c",
+  "output_sha256": "a89de829a2dca93ba940e752a88b91c95ced04070432473d7e8ed9a45137fed0",
+  "encryption_and_permissions_preserved": true,
+  "page_count_and_geometry_verified": true,
+  "non_target_text_fonts_sizes_positions_verified": true,
+  "pages": [
+    {
+      "page": 1,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 3,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 4,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 5,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 6,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 7,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 8,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 9,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 10,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 11,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    },
+    {
+      "page": 12,
+      "status": "removed",
+      "visible_candidates": 1,
+      "removed": 1,
+      "reason": "Only the isolated text-show operand was emptied; other content bytes preserved.",
+      "candidates": [
+        {
+          "text": "Preview",
+          "font": "Helvetica",
+          "size_pt": 150.0,
+          "angle_degrees": 45.0,
+          "alpha_0_to_255": 89,
+          "bbox": [
+            62.67,
+            157.499,
+            545.907,
+            640.736
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "This is not a general watermark-removal or redaction engine.",
+    "A no_candidate page may still contain image/vector/otherwise unsupported watermarks.",
+    "Only large diagonal ASCII text in a standalone top-level text object is supported.",
+    "No OCR, AI reconstruction, image cleanup, Form-XObject editing, or signature rewriting."
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "built_at_utc": "2026-09-28T02:48:51.165640+00:00",
+  "app_version": "0.1.0",
+  "architecture": "arm64",
+  "macos_tested": "26.6.2",
+  "minimum_macos": "26.0",
+  "python": "3.12.14",
+  "tcl_tk": "9.0.4",
+  "dependency_lock": "requirements-build-macos.txt",
+  "app": "dist/PreviewCleaner.app",
+  "archive": "dist/PreviewCleaner-macOS-arm64.zip",
+  "archive_bytes": 35749311,
+  "archive_sha256": "8c5d15563d1ae4452a301855dd933db0b414fe8329a95e7da25e9ccc5ea2927e",
+  "automated_tests": {
+    "passed": 33,
+    "failed": 0,
+    "warnings": 5
+  },
+  "packaged_gui_smoke": [
+    "launch",
+    "open synthetic two-page PDF with Vietnamese filename",
+    "render original",
+    "clean two overlays",
+    "render output preview",
+    "save PDF",
+    "save JSON report",
+    "navigate to page 2",
+    "quit",
+    "reopen final bundle"
+  ],
+  "export_checks": [
+    "report input/output hashes match files",
+    "two pages retained",
+    "target text removed",
+    "body text retained",
+    "line drawings retained"
+  ],
+  "signing": "ad-hoc; codesign --verify --deep --strict passed",
+  "notarized": false,
+  "limitations": [
+    "Not tested on a clean Mac or Intel Mac.",
+    "Full native acceptance including password dialogs and overwrite refusal remains pending."
+  ]
+}
