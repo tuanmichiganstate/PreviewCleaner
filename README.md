@@ -1,4 +1,4 @@
-# Preview Cleaner — working source prototype 0.2.0
+# Preview Cleaner — working source prototype 0.4.0
 
 A small, local desktop app for removing **supported separate PDF text overlays**, such as the large diagonal `Preview` label in the supplied example. It has a desktop interface and a command-line interface.
 
@@ -8,6 +8,8 @@ A small, local desktop app for removing **supported separate PDF text overlays**
 
 - Open a PDF; enter the target label (default `Preview`, case-insensitive).
 - Analyze and show original/output pages side by side.
+- Run analysis in a separate process with page progress, cancellation, and a five-minute timeout. Changing options or loading another document cancels stale work.
+- Show source printing permissions and the exact security change expected in the exported copy.
 - Navigate all pages and export a new PDF.
 - Save a page-by-page JSON verification report.
 - Preserve the original file; refuse to overwrite any existing output file.
@@ -58,7 +60,7 @@ These commands avoid needing to activate a PowerShell script.
 
 ## Desktop workflow
 
-1. Choose **Open PDF** and leave the label as `Preview` for the sample.
+1. Drag one PDF from Finder onto the **Original PDF** pane, or choose **Open PDF**. Leave the label as `Preview` for the sample. Dropping works before or after loading a document; password prompts and validation are the same as opening a file. Folders and multiple-file drops are rejected.
 2. Leave **Remove supported text overlays** checked to clean overlays, or uncheck it for a print-only copy. Printing is always enabled; there is no printing toggle.
 3. Choose **Analyze & preview**.
 4. Inspect the original/output panes and page-by-page messages. Navigate to check all pages.
@@ -100,7 +102,7 @@ This is not a universal watermark remover. It supports a narrow, testable class 
 
 It leaves scanned/image watermarks, text converted to outlines, nested Form-XObject watermarks, annotation stamps, mixed text objects, unknown encodings, inline-image content streams, and ambiguous target occurrences unchanged. In particular, if a page has both a small standalone `Preview` word and a large one, this version may reject the page rather than risk removing the wrong one.
 
-Limits: 100 MB file, 300 pages, 4 MB combined top-level page content. The desktop version processes synchronously; large files can temporarily pause the UI. Resource limits are not a security sandbox. Do not use the prototype as an Internet-facing upload service for untrusted documents.
+Limits: 100 MB file, 300 pages, 4 MB combined top-level page content. Desktop cleaning and verification run in a separate process with progress and a Cancel button; jobs time out after five minutes. Opening documents and rendering individual preview pages still run in the UI. Temporary job files live in a private local directory and are removed on completion, cancellation, or normal app exit. Resource limits are not a security sandbox. Do not use the prototype as an Internet-facing upload service for untrusted documents.
 
 ## Verification and tests
 
@@ -109,7 +111,9 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The current suite passes 46 automated tests. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, and printable copies. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
+The current suite passes 73 automated tests on macOS. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, printable copies, dropped-path handling, worker crashes/timeouts/cancellation, and the Tk event loop. The GUI tests require a graphical desktop with Tkinter. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
+
+`tests/fixtures` contains only synthetic PDFs from ReportLab, fpdf2, and PyMuPDF, plus a malformed file. Supported fixtures are checked for unchanged graphics and exact rendered pixels outside the removed label. Unsupported fixtures must remain byte-identical. To regenerate the corpus, install `requirements-fixtures.txt` and run `python scripts/generate_fixtures.py`; fixture-generator dependencies are not bundled into the app.
 
 Every export checks page count, page geometry, encryption/permission settings, and non-target text/font/size/position signatures. On the uploaded sample, an additional structural check verified unchanged decoded bytes in all 118 non-page-content, non-container streams, and verified each page stream differed only in the expected text-show operand. The original and output were rendered using PDFium; the app also rendered them using MuPDF.
 
@@ -127,6 +131,8 @@ python -m PyInstaller --windowed --onedir --name PreviewCleaner run_app.py
 ```
 
 Build Windows packages on Windows; that build has not been tested. Developer ID signing and notarization are not included in the macOS recipe.
+
+The local app includes a custom icon sourced from `assets/icon.svg`. See [the macOS release procedure](docs/MACOS_RELEASE.md) for the prepared Developer ID signing/notarization script, the built-in `--self-test` diagnostic, and the clean-Mac acceptance checklist. The current local build remains ad-hoc signed until those external steps are completed.
 
 ## References
 

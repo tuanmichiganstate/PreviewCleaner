@@ -1,6 +1,6 @@
 {
-  "built_at_utc": "2026-09-30T02:54:43.621145+00:00",
-  "app_version": "0.2.0",
+  "built_at_utc": "2026-09-30T03:44:28.457610+00:00",
+  "app_version": "0.4.0",
   "architecture": "arm64",
   "macos_tested": "26.6.2",
   "minimum_macos": "26.0",
@@ -9,16 +9,16 @@
   "dependency_lock": "requirements-build-macos.txt",
   "app": "dist/PreviewCleaner.app",
   "archive": "dist/PreviewCleaner-macOS-arm64.zip",
-  "archive_bytes": 35749608,
-  "archive_sha256": "74943be31f3223a0791b575ca76348b010da66b7ad943a60d5a8b3cc7fc989c6",
+  "archive_bytes": 35901782,
+  "archive_sha256": "cf2ae8586c23d5f25e570e145ab9fcfd1f5dd2d5e712630ab0f0887bc4b433ee",
   "automated_tests": {
-    "passed": 46,
+    "passed": 73,
     "failed": 0,
     "warnings": 5
   },
   "packaged_gui_smoke": [
-    "launch final 0.2.0 bundle",
-    "visually verify always-on printing notice and optional overlay-removal checkbox"
+    "launch final 0.3.0 bundle with TkinterDnD.Tk (loads native tkdnd)",
+    "visually verify Original PDF drop target and always-on printing notice"
   ],
   "printing_regressions": [
     "AES-128/AES-256 restricted inputs, with and without opening passwords",
@@ -34,7 +34,38 @@
   "notarized": false,
   "limitations": [
     "No physical printer job submitted.",
-    "Not tested on a clean Mac or Intel Mac.",
-    "Full native export acceptance for 0.2.0 remains pending; core and CLI exports tested."
-  ]
+    "Developer ID signing, notarization and separate clean-Mac testing deferred at user request until access is supplied.",
+    "Not tested on Intel Mac; build targets arm64 and macOS 26+."
+  ],
+  "drag_and_drop_checks": [
+    "native Tcl/Tk 9.0.4 loads tkdnd 2.10.2",
+    "source GUI registers NSPasteboardTypeFileURL on Original PDF pane",
+    "Tcl list paths preserve Unicode, spaces, and braces",
+    "invalid and multiple-file drops leave current document intact",
+    "drop schedules existing load_path after native drag session",
+    "User confirmed Finder drop of Unicode filename loads original PDF, second PDF replaces it, and protected PDF prompts for password."
+  ],
+  "code_signature": "ad-hoc; codesign --verify --deep --strict passed",
+  "packaged_self_test": {
+    "app_version": "0.4.0",
+    "macos": "26.6.2",
+    "architecture": "arm64",
+    "checks": [
+      "native drag-and-drop library and file-drop registration",
+      "spawned PDF worker",
+      "responsive Tk event loop",
+      "password authentication",
+      "overlay removal and text preservation",
+      "printable output",
+      "page rendering",
+      "worker cancellation and temporary-file cleanup"
+    ],
+    "passed": true,
+    "location": "Relocated bundle outside repository; same Mac, not a clean-Mac test."
+  },
+  "dependency_audit": {
+    "mach_o_files_checked": 63,
+    "non_system_absolute_dependencies": 0
+  },
+  "visual_qa": "Poppler-rendered ReportLab fixture before/after inspected: overlay removed; body text and rectangle preserved."
 }

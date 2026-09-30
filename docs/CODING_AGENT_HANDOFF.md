@@ -1,4 +1,4 @@
-# Coding-agent handoff — Preview Cleaner 0.1.0
+# Coding-agent handoff — Preview Cleaner 0.4.0
 
 ## Objective
 
@@ -6,7 +6,7 @@ Turn the supplied working source prototype into a reliable local macOS/Windows d
 
 ## Implemented baseline
 
-`preview_cleaner/core.py` reads PDFs, inspects rendered text spans, parses top-level PDF text objects, applies byte-offset patches, and verifies exported output. `gui.py` provides open/preview/navigation/export and JSON reporting. `__main__.py` is the CLI. `tests/test_core.py` supplies 25 automated cases.
+`preview_cleaner/core.py` reads PDFs, inspects rendered text spans, parses top-level PDF text objects, applies byte-offset patches, enables printing, and verifies exported output. `gui.py` provides drag-and-drop, preview/navigation/export and JSON reporting; `jobs.py` isolates analysis in a spawned process. `__main__.py` is the CLI. The suite includes 73 automated cases and a synthetic multi-producer corpus. The frozen app has an offline `--self-test` diagnostic.
 
 The reference sample is a 12-page PDF whose page wrapper separately invokes the score Form XObject, draws a 150-pt diagonal `Preview` text object, then draws its edition footer. Only the target text-show operand is changed. Do not remove the entire page stream, Form XObject, font resource, gray content, or watermark bounding rectangle.
 
@@ -43,7 +43,7 @@ The offset parser uses `pypdf.generic.read_object`, not a raw global regex. Unre
 
 Text fingerprint validation protects text content and position, but is not proof of arbitrary graphics equivalence for every PDF. Maintain independent stream checks and add rendered-diff tests with known allowable change masks. The original-sample validation is evidence for that sample, not universal correctness.
 
-The current UI is synchronous and uses Tkinter. A PySide6 UI is a possible later substitution, not required to prove the removal algorithm. There is no existing application repository, migration, or integration requirement assumed by this package.
+The UI uses Tkinter/tkdnd. Cleaning and verification run in a spawned worker process with progress, cancellation, timeout, and private temporary files. File opening and per-page rendering remain synchronous. A PySide6 UI is a possible later substitution, not required to prove the removal algorithm. The macOS packaging and optional signing/notarization workflow are documented in MACOS_RELEASE.md; external signing credentials and clean-Mac acceptance are still required for distribution validation.
 
 ## Release gates
 

@@ -1,0 +1,32 @@
+[
+  {
+    "file": "reportlab-supported.pdf",
+    "producer": "ReportLab 5.0.1",
+    "expected": "removed",
+    "sha256": "ba8dd6137cf1c1aec1bc5574d61ed84a128aacaaab60fe1ea67c5dc0f00da8df"
+  },
+  {
+    "file": "fpdf2-supported.pdf",
+    "producer": "fpdf2 2.8.9",
+    "expected": "removed",
+    "sha256": "bdf15c067fbe7da9b83e3aa0e4d5e8c0d7f7a0a9f4bcdbaaec9dcbca69a296fc"
+  },
+  {
+    "file": "mupdf-nested-form.pdf",
+    "producer": "PyMuPDF 1.28.2",
+    "expected": "unsupported",
+    "sha256": "ac5b804529ed76fc38fb6bc8921ef1d5bee5f0336b061f88268891d4671d8333"
+  },
+  {
+    "file": "mupdf-raster.pdf",
+    "producer": "PyMuPDF 1.28.2",
+    "expected": "no_candidate",
+    "sha256": "fd5c5c4117a3524ba725abb80ad489514bded8d3ab2c6b1c891d73775250de2e"
+  },
+  {
+    "file": "malformed.pdf",
+    "producer": "synthetic malformed bytes",
+    "expected": "error",
+    "sha256": "869d4d582c0ab3445ba27d31903ff859236986df705d9529c9476f1467490368"
+  }
+]

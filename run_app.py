@@ -1,4 +1,9 @@
-from preview_cleaner.gui import main
-
 if __name__ == "__main__":
+    from multiprocessing import freeze_support
+    freeze_support()
+    import sys
+    if len(sys.argv) == 3 and sys.argv[1] == "--self-test":
+        from preview_cleaner.diagnostics import run
+        raise SystemExit(run(sys.argv[2]))
+    from preview_cleaner.gui import main
     main()

@@ -1,0 +1,67 @@
+import time
+
+from preview_cleaner.jobs import CleaningJob
+from test_core import make_pdf
+
+
+def finish(job):
+    messages = []
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        messages.extend(job.poll())
+        if any(m[0] in ("done", "error") for m in messages):
+            return messages
+        time.sleep(0.01)
+    raise AssertionError("Worker did not finish")
+
+
+def test_spawned_worker_progress_and_verified_result():
+    job = CleaningJob(make_pdf(), "Preview", "", True)
+    folder = job.folder
+    try:
+        messages = finish(job)
+        assert any(m[0] == "progress" for m in messages)
+        assert messages[-1][0] == "done"
+        assert messages[-1][1].report["removed_count"] == 1
+        assert job.closed and not folder.exists()
+    finally:
+        job.close()
+
+
+def test_cancel_cleans_private_files_and_allows_next_job():
+    job = CleaningJob(make_pdf(), "Preview", "", True)
+    folder = job.folder
+    job.close()
+    assert job.closed and not folder.exists()
+    assert job.poll() == []
+    another = CleaningJob(make_pdf(), "Preview", "", False)
+    try:
+        assert finish(another)[-1][0] == "done"
+    finally:
+        another.close()
+
+
+def test_worker_error_is_reported_and_cleaned_up():
+    job = CleaningJob(b"not a PDF", "Preview", "", True)
+    try:
+        assert finish(job)[-1][0] == "error"
+        assert not job.folder.exists()
+    finally:
+        job.close()
+
+
+def test_timeout_stops_worker():
+    job = CleaningJob(make_pdf(), "Preview", "", True, timeout=0)
+    assert job.poll()[0][0] == "error"
+    assert job.closed and not job.folder.exists()
+
+
+def test_crashed_worker_is_detected():
+    job = CleaningJob(make_pdf(), "Preview", "", True)
+    job.process.kill()
+    job.process.join(timeout=2)
+    try:
+        assert finish(job)[-1][0] == "error"
+        assert not job.folder.exists()
+    finally:
+        job.close()

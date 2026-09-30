@@ -1,0 +1,74 @@
+# macOS release procedure
+
+The local build is for Apple Silicon on macOS 26 or later. Its app icon, Python,
+Tcl/Tk, tkdnd, and PDF libraries are included. No Python installation is required
+on the destination Mac. Developer ID signing and notarization are optional for
+local development but required for the intended public distribution workflow.
+
+## Build and local checks
+
+Quit the running app, then run `bash scripts/build_macos.sh`. This runs the
+regression suite, regenerates the icon, builds the app, verifies its signature,
+and creates `dist/PreviewCleaner-macOS-arm64.zip`.
+
+Without `MACOS_SIGN_IDENTITY`, PyInstaller applies an ad-hoc signature. That is
+not a Developer ID signature or Apple notarization.
+
+## Developer ID signing and notarization
+
+1. On your Mac, install your **Developer ID Application** certificate with its
+   private key into Keychain. Check it with `security find-identity -v -p codesigning`.
+2. Create a notarytool Keychain profile locally using
+   `xcrun notarytool store-credentials PreviewCleaner`. Follow its interactive
+   prompts with your own Apple Developer credentials. Do not put credentials in
+   this repository or chat.
+3. Set the non-secret identity and profile names, then run:
+
+   ```bash
+   export MACOS_SIGN_IDENTITY='Developer ID Application: Your Name (TEAMID)'
+   export NOTARY_PROFILE='PreviewCleaner'
+   bash scripts/notarize_macos.sh
+   ```
+
+The script rebuilds with the identity, uploads the app archive to Apple's notary
+service, requires an Accepted result, staples and validates the ticket, checks
+Gatekeeper, and recreates the archive with the stapled app. Do not distribute an
+archive if any command fails. Apple's [notarization workflow documentation](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+describes the service and credential setup.
+
+## Acceptance on a separate clean Mac
+
+This must be a separate machine or fresh VM with no project environment,
+Homebrew, or Python dependencies. Testing another folder on the development
+Mac is only a relocation check, not clean-Mac validation.
+
+First run the built-in offline diagnostic (choose a new report filename):
+
+```bash
+/Applications/PreviewCleaner.app/Contents/MacOS/PreviewCleaner --self-test "$HOME/Desktop/PreviewCleaner-check.json"
+```
+
+The resulting JSON must contain `"passed": true`. This exercises native tkdnd
+loading, a spawned worker, password handling, PDF rendering, always-on printing,
+and cancellation, without using real documents. It does not substitute for the
+Finder gesture and Gatekeeper checks below.
+
+- Record macOS version, architecture, archive SHA-256, and app version.
+- Transfer the final archive normally, extract it, copy the app to Applications,
+  and open it through Finder with Gatekeeper protections intact.
+- Drop `tests/fixtures/reportlab-supported.pdf` from Finder onto Original PDF.
+  Analyze, navigate, and save a new PDF and report; reopen the exported PDF.
+- Drop another PDF while one is loaded; test filenames with spaces and Unicode.
+- Test a password-protected synthetic PDF: cancel the prompt, enter an incorrect
+  password, then the correct password. Earlier open content must survive failures.
+- Verify blocked-printing inputs show the security-removal notice and exported
+  copies allow high-quality printing. Do not submit a physical print job unless wanted.
+- Analyze a larger synthetic PDF, move the window during processing, cancel,
+  restart, change options during processing, and close the app during a job.
+- Reject folders and multi-file drops; refuse overwriting an existing output.
+- Test unsupported, malformed, and signature-field fixtures without losing the original.
+- Repeat offline after the notarization ticket is stapled.
+
+Record actual results and failures in `docs/macos-build-validation.json`. Do not
+mark Developer ID signing, notarization, or clean-Mac acceptance complete based
+on the local ad-hoc build.

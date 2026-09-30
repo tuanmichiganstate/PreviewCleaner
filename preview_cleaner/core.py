@@ -13,7 +13,7 @@ import re
 import hashlib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pymupdf
 from pypdf.generic import ArrayObject, ByteStringObject, TextStringObject, read_object
@@ -317,7 +317,8 @@ def analyze(data: bytes, target: str = "Preview", password: str = "") -> dict[st
 
 
 def clean(data: bytes, target: str = "Preview", password: str = "", *,
-          remove_overlays: bool = True) -> Result:
+          remove_overlays: bool = True,
+          progress: Callable[[str, int, int], None] | None = None) -> Result:
     """Create a printable copy, optionally removing supported text overlays.
 
     Print-restricted inputs are decrypted in the copy. This also removes their
@@ -335,6 +336,8 @@ def clean(data: bytes, target: str = "Preview", password: str = "", *,
         security_removed = not printing_was_allowed
         original_geometry = [(tuple(p.mediabox), tuple(p.cropbox), p.rotation) for p in doc]
         for index in range(len(doc)):
+            if progress:
+                progress("Analyzing", index, len(doc))
             page = doc[index]
             original_sig, candidates = text_fingerprint(page, target)
             desired_sig, _ = text_fingerprint(page, target, omit_candidates=True)
@@ -385,6 +388,8 @@ def clean(data: bytes, target: str = "Preview", password: str = "", *,
                 raise CleanerError(f"Page {index + 1}: processing failed: {exc}") from exc
             rows.append(row)
         removed = sum(p.removed for p in rows)
+        if progress:
+            progress("Writing preview", 0, 1)
         if removed or security_removed:
             encryption = (pymupdf.PDF_ENCRYPT_NONE if security_removed
                           else pymupdf.PDF_ENCRYPT_KEEP)
@@ -405,11 +410,13 @@ def clean(data: bytes, target: str = "Preview", password: str = "", *,
                                      check.metadata.get("encryption") != original_encryption):
             raise CleanerError("Output encryption/permission validation failed.")
         for index, expected_sig in enumerate(expected):
+            if progress:
+                progress("Verifying", index, len(expected))
             sig, _ = text_fingerprint(check[index], target)
             if sig != expected_sig:
                 raise CleanerError(f"Saved-output text validation failed on page {index + 1}.")
     report = {
-        "app_version": "0.2.0", "target": target if remove_overlays else None, "page_count": len(rows),
+        "app_version": "0.4.0", "target": target if remove_overlays else None, "page_count": len(rows),
         "remove_overlays": remove_overlays,
         "removed_count": removed, "pages_changed": sum(p.removed > 0 for p in rows),
         "unsupported_pages": [p.page for p in rows if p.status == "unsupported"],

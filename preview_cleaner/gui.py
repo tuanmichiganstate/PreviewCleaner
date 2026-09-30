@@ -8,8 +8,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import pymupdf
+from tkinterdnd2 import COPY, DND_FILES, REFUSE_DROP, TkinterDnD
 
-from .core import CleanerError, PasswordNeeded, clean, open_pdf, read_pdf, save_new
+from .core import CleanerError, PasswordNeeded, open_pdf, printing_allowed, read_pdf, save_new
+from .jobs import CleaningJob
 
 
 class CleanerWindow:
@@ -24,12 +26,15 @@ class CleanerWindow:
         self.original: pymupdf.Document | None = None
         self.output: pymupdf.Document | None = None
         self.result = None
+        self.job = None
+        self.poll_id = None
         self.page = 0
         self.images: list[tk.PhotoImage] = []
         self.target = tk.StringVar(value="Preview")
         self.remove_overlays = tk.BooleanVar(value=True)
-        self.status = tk.StringVar(value="Open a PDF to begin. Your original file will not be overwritten.")
+        self.status = tk.StringVar(value="Open or drop a PDF to begin. Your original file will not be overwritten.")
         self.page_label = tk.StringVar(value="No document")
+        self.security_status = tk.StringVar(value="Source printing: no document. Output printing: always enabled.")
 
         main = ttk.Frame(root, padding=16)
         main.pack(fill="both", expand=True)
@@ -51,6 +56,13 @@ class CleanerWindow:
                   wraplength=1200).pack(anchor="w", pady=(2, 8))
         self.path_label = ttk.Label(main, text="No PDF selected", wraplength=1200)
         self.path_label.pack(anchor="w", pady=(0, 8))
+        ttk.Label(main, textvariable=self.security_status, wraplength=1200).pack(anchor="w", pady=(0, 8))
+        progress_row = ttk.Frame(main)
+        progress_row.pack(fill="x", pady=(0, 8))
+        self.progress = ttk.Progressbar(progress_row, maximum=100)
+        self.progress.pack(side="left", fill="x", expand=True)
+        self.cancel_button = ttk.Button(progress_row, text="Cancel", command=self.cancel_processing, state="disabled")
+        self.cancel_button.pack(side="right", padx=(8, 0))
 
         viewer = ttk.Frame(main)
         viewer.pack(fill="both", expand=True)
@@ -58,12 +70,16 @@ class CleanerWindow:
         viewer.columnconfigure(1, weight=1)
         viewer.rowconfigure(0, weight=1)
         self.panels = []
-        for col, title in enumerate(("Original PDF", "Output preview")):
+        for col, title in enumerate(("Original PDF — drop a PDF here", "Output preview")):
             frame = ttk.LabelFrame(viewer, text=title, padding=8)
             frame.grid(row=0, column=col, sticky="nsew", padx=(0, 6) if col == 0 else (6, 0))
-            label = ttk.Label(frame, text="Open a document" if col == 0 else "Run Analyze & preview", anchor="center")
+            label = ttk.Label(frame, text="Drop a PDF here or choose Open PDF" if col == 0 else "Run Analyze & preview", anchor="center")
             label.pack(fill="both", expand=True)
             self.panels.append(label)
+            if col == 0:
+                for widget in (frame, label):
+                    widget.drop_target_register(DND_FILES)
+                    widget.dnd_bind("<<Drop>>", self.drop_pdf)
         nav = ttk.Frame(main)
         nav.pack(fill="x", pady=8)
         ttk.Button(nav, text="◀ Previous", command=lambda: self.go(-1)).pack(side="left")
@@ -79,6 +95,7 @@ class CleanerWindow:
         self.remove_overlays.trace_add("write", self.invalidate_result)
 
     def invalidate_result(self, *_):
+        self.cancel_processing(quiet=True)
         self.result = None
         if self.output is not None:
             self.output.close()
@@ -100,6 +117,24 @@ class CleanerWindow:
         if path:
             self.load_path(Path(path))
 
+    def drop_pdf(self, event):
+        """Accept one local PDF; Tcl list parsing preserves spaces and braces."""
+        try:
+            paths = self.root.tk.splitlist(event.data)
+        except tk.TclError:
+            self.status.set("Could not read the dropped filename. Use Open PDF instead.")
+            return REFUSE_DROP
+        if len(paths) != 1:
+            self.status.set("Drop one PDF at a time.")
+            return REFUSE_DROP
+        path = Path(paths[0])
+        if path.suffix.lower() != ".pdf" or not path.is_file():
+            self.status.set("Drop a PDF file, not a folder or another file type.")
+            return REFUSE_DROP
+        # Finish the native drag session before opening a password/error dialog.
+        self.root.after_idle(lambda: self.load_path(path))
+        return COPY
+
     def load_path(self, path: Path):
         new_doc = None
         try:
@@ -113,6 +148,7 @@ class CleanerWindow:
                     return
                 password = answer
                 new_doc = open_pdf(data, password)
+            self.cancel_processing(quiet=True)
             self.close_documents()
             self.path, self.data, self.password = path, data, password
             self.original, self.output, self.result = new_doc, None, None
@@ -122,6 +158,11 @@ class CleanerWindow:
             self.save_button.configure(state="disabled")
             self.report_button.configure(state="disabled")
             self.status.set(f"Loaded {len(self.original)} pages. Analyze before saving.")
+            if printing_allowed(new_doc):
+                self.security_status.set("Source: high-quality printing allowed. Output: printing enabled; existing password/security retained.")
+            else:
+                quality = "low-quality printing only" if new_doc.permissions & pymupdf.PDF_PERM_PRINT else "printing blocked"
+                self.security_status.set(f"Source: {quality}. Output: high-quality printing enabled; password, encryption and other restrictions removed.")
             self.note("The first version handles large diagonal text labels in separate top-level PDF text objects. Scanned/image watermarks are not reconstructed.")
             self.render()
         except Exception as exc:
@@ -133,12 +174,59 @@ class CleanerWindow:
         if self.data is None:
             return
         self.invalidate_result()
-        self.root.configure(cursor="watch")
-        self.status.set("Analyzing and verifying…")
-        self.root.update_idletasks()
+        self.status.set("Starting PDF worker… You can cancel at any time.")
         try:
-            result = clean(self.data, self.target.get(), self.password,
-                           remove_overlays=self.remove_overlays.get())
+            self.job = CleaningJob(self.data, self.target.get(), self.password, self.remove_overlays.get())
+            self.process_button.configure(state="disabled")
+            self.cancel_button.configure(state="normal")
+            self.poll_id = self.root.after(50, self.poll_processing)
+        except Exception as exc:
+            self.status.set("Could not start processing. No file has been saved.")
+            messagebox.showerror("Could not process PDF", str(exc))
+
+    def cancel_processing(self, quiet=False):
+        if self.poll_id is not None:
+            self.root.after_cancel(self.poll_id)
+            self.poll_id = None
+        was_running = self.job is not None
+        if self.job is not None:
+            self.job.close()
+            self.job = None
+        self.cancel_button.configure(state="disabled")
+        self.process_button.configure(state="normal" if self.data is not None else "disabled")
+        self.progress.configure(value=0)
+        if was_running and not quiet:
+            self.status.set("Processing cancelled. No file was saved. You can analyze again.")
+
+    def poll_processing(self):
+        self.poll_id = None
+        if self.job is None:
+            return
+        try:
+            for message in self.job.poll():
+                if message[0] == "progress":
+                    _, phase, done, total = message
+                    base, weight = {"Analyzing": (0, 50), "Writing preview": (50, 10),
+                                    "Verifying": (60, 40)}[phase]
+                    self.progress.configure(value=base + weight * done / max(total, 1))
+                    self.status.set(f"{phase}: {done + 1} of {total}. You can cancel at any time.")
+                elif message[0] == "error":
+                    raise CleanerError(message[1])
+                elif message[0] == "done":
+                    self.job = None
+                    self.cancel_button.configure(state="disabled")
+                    self.process_button.configure(state="normal")
+                    self.progress.configure(value=100)
+                    self.show_result(message[1])
+                    return
+            self.poll_id = self.root.after(50, self.poll_processing)
+        except Exception as exc:
+            self.cancel_processing(quiet=True)
+            self.status.set("Processing failed. No file has been saved.")
+            messagebox.showerror("Could not process PDF", str(exc))
+
+    def show_result(self, result):
+        try:
             new_output = open_pdf(result.pdf_bytes, self.password)
             if self.output is not None:
                 self.output.close()
@@ -157,14 +245,12 @@ class CleanerWindow:
         except Exception as exc:
             self.status.set("Processing failed. No file has been saved.")
             messagebox.showerror("Could not process PDF", str(exc))
-        finally:
-            self.root.configure(cursor="")
 
     def render(self):
         self.images = []
         for label, document in zip(self.panels, (self.original, self.output)):
             if document is None:
-                label.configure(image="", text="Run Analyze & preview" if self.original else "Open a document")
+                label.configure(image="", text="Run Analyze & preview" if self.original else "Drop a PDF here or choose Open PDF")
                 continue
             page = document[self.page]
             width = max(300, label.winfo_width() - 12)
@@ -216,11 +302,12 @@ class CleanerWindow:
         self.original = self.output = None
 
     def close(self):
+        self.cancel_processing(quiet=True)
         self.close_documents()
         self.root.destroy()
 
 
 def main():
-    root = tk.Tk()
+    root = TkinterDnD.Tk()
     CleanerWindow(root)
     root.mainloop()

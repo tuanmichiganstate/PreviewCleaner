@@ -1,0 +1,7 @@
+# Only needed to regenerate tests/fixtures, not to run the app or its tests.
+reportlab==5.0.1
+fpdf2==2.8.9
+charset-normalizer==3.5.1
+defusedxml==0.7.1
+fonttools==4.66.1
+pillow==12.3.0
