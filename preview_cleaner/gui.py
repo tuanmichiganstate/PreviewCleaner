@@ -27,6 +27,7 @@ class CleanerWindow:
         self.page = 0
         self.images: list[tk.PhotoImage] = []
         self.target = tk.StringVar(value="Preview")
+        self.remove_overlays = tk.BooleanVar(value=True)
         self.status = tk.StringVar(value="Open a PDF to begin. Your original file will not be overwritten.")
         self.page_label = tk.StringVar(value="No document")
 
@@ -45,6 +46,9 @@ class CleanerWindow:
         self.save_button.pack(side="left")
         self.report_button = ttk.Button(toolbar, text="Save report…", command=self.save_report, state="disabled")
         self.report_button.pack(side="left", padx=10)
+        ttk.Checkbutton(main, text="Remove supported text overlays", variable=self.remove_overlays).pack(anchor="w")
+        ttk.Label(main, text="Printing is always enabled in exported PDFs. Print-restricted copies lose password and other security restrictions.",
+                  wraplength=1200).pack(anchor="w", pady=(2, 8))
         self.path_label = ttk.Label(main, text="No PDF selected", wraplength=1200)
         self.path_label.pack(anchor="w", pady=(0, 8))
 
@@ -69,9 +73,10 @@ class CleanerWindow:
         ttk.Label(main, textvariable=self.status, wraplength=1200).pack(anchor="w", pady=(0, 8))
         self.log = tk.Text(main, height=5, wrap="word", state="disabled")
         self.log.pack(fill="x")
-        ttk.Label(main, text="For documents you own or are authorized to modify. Unsupported pages are left unchanged.").pack(anchor="w", pady=(8, 0))
+        ttk.Label(main, text="For documents you own or are authorized to modify. Unsupported overlays are left unchanged.").pack(anchor="w", pady=(8, 0))
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.target.trace_add("write", self.invalidate_result)
+        self.remove_overlays.trace_add("write", self.invalidate_result)
 
     def invalidate_result(self, *_):
         self.result = None
@@ -81,7 +86,7 @@ class CleanerWindow:
         self.save_button.configure(state="disabled")
         self.report_button.configure(state="disabled")
         if self.original is not None:
-            self.status.set("Target changed. Run Analyze & preview again before export.")
+            self.status.set("Options changed. Run Analyze & preview again before export.")
             self.render()
 
     def note(self, text: str):
@@ -132,22 +137,23 @@ class CleanerWindow:
         self.status.set("Analyzing and verifying…")
         self.root.update_idletasks()
         try:
-            result = clean(self.data, self.target.get(), self.password)
+            result = clean(self.data, self.target.get(), self.password,
+                           remove_overlays=self.remove_overlays.get())
             new_output = open_pdf(result.pdf_bytes, self.password)
             if self.output is not None:
                 self.output.close()
             self.result, self.output = result, new_output
             report = result.report
             changed = report["removed_count"]
-            self.save_button.configure(state="normal" if changed else "disabled")
+            self.save_button.configure(state="normal")
             self.report_button.configure(state="normal")
-            self.status.set(f"Removed {changed} overlay(s) on {report['pages_changed']} of {report['page_count']} pages. Review both panes before export.")
-            self.note("\n".join(f"Page {r['page']}: {r['status']} — {r['reason']}" for r in report["pages"]))
+            self.status.set(f"Printable copy ready. Removed {changed} overlay(s) on {report['pages_changed']} of {report['page_count']} pages. Review before export.")
+            self.note(report["security_note"] + "\n" + "\n".join(f"Page {r['page']}: {r['status']} — {r['reason']}" for r in report["pages"]))
             self.render()
             if report["unsupported_pages"]:
-                messagebox.showwarning("Some pages were left unchanged", "Unsupported pages: " + ", ".join(map(str, report["unsupported_pages"])) + ". See the report; do not assume all marks were removed.")
-            elif not changed:
-                messagebox.showinfo("No supported overlay found", "No supported separate text overlay was removed. The file may use an image, vector outlines, or an unsupported text arrangement. The original is unchanged.")
+                messagebox.showwarning("Some overlays were left unchanged", "Unsupported overlays on pages: " + ", ".join(map(str, report["unsupported_pages"])) + ". Printing is enabled, but do not assume all marks were removed.")
+            elif not changed and self.remove_overlays.get():
+                messagebox.showinfo("Printable copy ready", "No supported text overlay was removed. You can still save a printable copy. Unsupported marks may remain; review the preview and report.")
         except Exception as exc:
             self.status.set("Processing failed. No file has been saved.")
             messagebox.showerror("Could not process PDF", str(exc))
@@ -176,11 +182,11 @@ class CleanerWindow:
             self.render()
 
     def save(self):
-        if self.result is None or not self.result.report["removed_count"]:
+        if self.result is None:
             return
         path = filedialog.asksaveasfilename(
             title="Save a new PDF (existing files are never replaced)",
-            initialdir=str(self.path.parent), initialfile=f"{self.path.stem}_cleaned.pdf",
+            initialdir=str(self.path.parent), initialfile=f"{self.path.stem}_printable.pdf",
             defaultextension=".pdf", filetypes=[("PDF document", "*.pdf")],
         )
         if path:

@@ -1,4 +1,4 @@
-# Preview Cleaner — working source prototype 0.1.0
+# Preview Cleaner — working source prototype 0.2.0
 
 A small, local desktop app for removing **supported separate PDF text overlays**, such as the large diagonal `Preview` label in the supplied example. It has a desktop interface and a command-line interface.
 
@@ -12,7 +12,8 @@ A small, local desktop app for removing **supported separate PDF text overlays**
 - Save a page-by-page JSON verification report.
 - Preserve the original file; refuse to overwrite any existing output file.
 - Retain PDF vector content rather than exporting page images.
-- Keep original encryption/permission settings. Password-protected inputs require their opening password. Passwords are not written to reports.
+- Enable ordinary and high-quality printing automatically in every export, including when no overlay is found. Print-restricted copies are saved without encryption, opening passwords, or other PDF permission restrictions. Already-printable PDFs retain their existing security. Password-protected inputs still require a valid opening password; passwords are never written to reports.
+- Print-only mode preserves page content, including overlays.
 - Refuse signed PDFs / detected signature fields.
 - Fail closed on unsupported or ambiguous page structures.
 
@@ -58,10 +59,11 @@ These commands avoid needing to activate a PowerShell script.
 ## Desktop workflow
 
 1. Choose **Open PDF** and leave the label as `Preview` for the sample.
-2. Choose **Analyze & preview**.
-3. Inspect the original/output panes and page-by-page messages. Navigate to check all pages.
-4. Choose **Save new PDF** and use a new name, such as `score_cleaned.pdf`.
-5. Optionally choose **Save report**.
+2. Leave **Remove supported text overlays** checked to clean overlays, or uncheck it for a print-only copy. Printing is always enabled; there is no printing toggle.
+3. Choose **Analyze & preview**.
+4. Inspect the original/output panes and page-by-page messages. Navigate to check all pages.
+5. Choose **Save new PDF** and use a new name, such as `score_printable.pdf`.
+6. Optionally choose **Save report**. The report records whether PDF security was removed for printing.
 
 A `no_candidate` result means the detector found no supported-looking text, **not** that the page is guaranteed watermark-free. A label may be an image, vector outlines, or another unsupported representation. Some pages can be cleaned while others remain unchanged; the app reports that distinction.
 
@@ -70,11 +72,14 @@ A `no_candidate` result means the detector found no supported-looking text, **no
 ```bash
 python -m preview_cleaner "/path/to/input.pdf" --inspect
 python -m preview_cleaner "/path/to/input.pdf" -o "/path/to/input_cleaned.pdf" --report "/path/to/report.json"
+python -m preview_cleaner "/path/to/input.pdf" --print-only -o "/path/to/input_printable.pdf"
 ```
 
 Optional label: `--text DRAFT`. Detection remains limited to large diagonal text, even when the target label changes.
 
-Exit codes: `0` successful inspection or fully supported processing; `1` error; `2` no supported overlay removed (no output PDF); `3` output produced but some candidate pages were unsupported.
+All exports enable printing. `--print-only` skips overlay removal; `--inspect` remains read-only and reports the current printing permission. This prepares a PDF for printing in your PDF viewer; it does not send a job to a printer.
+
+Exit codes: `0` successful inspection or export; `1` error; `3` printable output produced but some candidate overlays were unsupported. Version 0.2.0 exports even when no overlay is removed; the former exit code `2` is no longer used.
 
 ## Why the sample works
 
@@ -104,7 +109,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The initial run passed 25 automated tests. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, and repeat processing.
+The current suite passes 46 automated tests. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, and printable copies. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
 
 Every export checks page count, page geometry, encryption/permission settings, and non-target text/font/size/position signatures. On the uploaded sample, an additional structural check verified unchanged decoded bytes in all 118 non-page-content, non-container streams, and verified each page stream differed only in the expected text-show operand. The original and output were rendered using PDFium; the app also rendered them using MuPDF.
 

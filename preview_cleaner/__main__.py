@@ -15,15 +15,19 @@ def main() -> int:
     parser.add_argument("--text", default="Preview", help="Target text, case-insensitive; default Preview")
     parser.add_argument("--inspect", action="store_true", help="Analyze without producing a PDF")
     parser.add_argument("--report", type=Path, help="Save a new JSON report")
+    parser.add_argument("--print-only", action="store_true",
+                        help="Enable printing without removing overlays. All exports enable printing; restricted copies lose PDF security.")
     args = parser.parse_args()
     if args.input is None:
-        if args.output or args.inspect or args.report:
+        if args.output or args.inspect or args.report or args.print_only:
             parser.error("An input path is required for command-line operations.")
         from .gui import main as gui_main
         gui_main()
         return 0
     if not args.inspect and args.output is None:
         parser.error("Use --inspect or provide --output.")
+    if args.inspect and args.print_only:
+        parser.error("--print-only creates an output and cannot be combined with --inspect.")
     try:
         if args.output and args.output.exists():
             raise CleanerError("Output already exists. Choose a new filename.")
@@ -33,20 +37,15 @@ def main() -> int:
             raise CleanerError("Report and PDF need different filenames.")
         data = read_pdf(args.input)
         operation = analyze if args.inspect else clean
+        options = {} if args.inspect else {"remove_overlays": not args.print_only}
         try:
-            result = operation(data, args.text)
+            result = operation(data, args.text, **options)
         except PasswordNeeded:
-            result = operation(data, args.text, getpass.getpass("PDF opening password: "))
+            result = operation(data, args.text, getpass.getpass("PDF opening password: "), **options)
         if args.inspect:
             report = result
         else:
             report = result.report
-            if not report["removed_count"]:
-                print(json.dumps(report, indent=2))
-                print("No supported overlay removed; no output PDF written.", file=sys.stderr)
-                if args.report:
-                    save_new(args.report, json.dumps(report, indent=2).encode(), args.input)
-                return 2
             save_new(args.output, result.pdf_bytes, args.input)
             report = dict(report, output_path=str(args.output))
         if args.report:

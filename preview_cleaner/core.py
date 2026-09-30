@@ -294,6 +294,12 @@ def _target(target: str) -> str:
     return target
 
 
+def printing_allowed(doc: pymupdf.Document) -> bool:
+    """Require both ordinary and high-quality printing permissions."""
+    flags = pymupdf.PDF_PERM_PRINT | pymupdf.PDF_PERM_PRINT_HQ
+    return doc.permissions & flags == flags
+
+
 def analyze(data: bytes, target: str = "Preview", password: str = "") -> dict[str, Any]:
     target = _target(target)
     with open_pdf(data, password) as doc:
@@ -304,13 +310,20 @@ def analyze(data: bytes, target: str = "Preview", password: str = "") -> dict[st
         return {
             "page_count": len(doc), "input_sha256": sha256(data), "target": target,
             "signed_or_signature_fields": _signed(doc), "pages": pages,
+            "printing_allowed": printing_allowed(doc),
             "visible_candidate_count": sum(len(p["visible_candidates"]) for p in pages),
             "note": "A visual candidate is not a guarantee of a supported removable text object.",
         }
 
 
-def clean(data: bytes, target: str = "Preview", password: str = "") -> Result:
-    target = _target(target)
+def clean(data: bytes, target: str = "Preview", password: str = "", *,
+          remove_overlays: bool = True) -> Result:
+    """Create a printable copy, optionally removing supported text overlays.
+
+    Print-restricted inputs are decrypted in the copy. This also removes their
+    opening password and other permission restrictions. Originals stay intact.
+    """
+    target = _target(target) if remove_overlays else "Preview"
     rows: list[PageResult] = []
     expected: list[Any] = []
     with open_pdf(data, password) as doc:
@@ -318,6 +331,8 @@ def clean(data: bytes, target: str = "Preview", password: str = "") -> Result:
             raise CleanerError("Signed PDFs / PDFs with signature fields are not edited by this prototype.")
         original_permissions = doc.permissions
         original_encryption = doc.metadata.get("encryption")
+        printing_was_allowed = printing_allowed(doc)
+        security_removed = not printing_was_allowed
         original_geometry = [(tuple(p.mediabox), tuple(p.cropbox), p.rotation) for p in doc]
         for index in range(len(doc)):
             page = doc[index]
@@ -325,6 +340,11 @@ def clean(data: bytes, target: str = "Preview", password: str = "") -> Result:
             desired_sig, _ = text_fingerprint(page, target, omit_candidates=True)
             row = PageResult(index + 1, "no_candidate", len(candidates), candidates=candidates)
             expected.append(original_sig)
+            if not remove_overlays:
+                row.status = "unchanged"
+                row.reason = "Print-only mode; page content unchanged."
+                rows.append(row)
+                continue
             if not candidates:
                 row.reason = "No large diagonal target text was detected; page unchanged."
                 rows.append(row)
@@ -365,29 +385,41 @@ def clean(data: bytes, target: str = "Preview", password: str = "") -> Result:
                 raise CleanerError(f"Page {index + 1}: processing failed: {exc}") from exc
             rows.append(row)
         removed = sum(p.removed for p in rows)
-        if removed:
-            # Keep encryption and permission settings. No password cracking / decryption output.
+        if removed or security_removed:
+            encryption = (pymupdf.PDF_ENCRYPT_NONE if security_removed
+                          else pymupdf.PDF_ENCRYPT_KEEP)
             output = doc.tobytes(garbage=1, deflate=True, clean=False,
-                                 encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                                 encryption=encryption)
         else:
             output = data
-    with open_pdf(output, password) as check:
+    with open_pdf(output, "" if security_removed else password) as check:
         if len(check) != len(rows):
             raise CleanerError("Output page-count validation failed.")
         if [(tuple(p.mediabox), tuple(p.cropbox), p.rotation) for p in check] != original_geometry:
             raise CleanerError("Output page-geometry validation failed.")
-        if check.permissions != original_permissions or check.metadata.get("encryption") != original_encryption:
+        if not printing_allowed(check):
+            raise CleanerError("Output printing-permission validation failed.")
+        if security_removed and (check.needs_pass or check.metadata.get("encryption")):
+            raise CleanerError("Output security-removal validation failed.")
+        if not security_removed and (check.permissions != original_permissions or
+                                     check.metadata.get("encryption") != original_encryption):
             raise CleanerError("Output encryption/permission validation failed.")
         for index, expected_sig in enumerate(expected):
             sig, _ = text_fingerprint(check[index], target)
             if sig != expected_sig:
                 raise CleanerError(f"Saved-output text validation failed on page {index + 1}.")
     report = {
-        "app_version": "0.1.0", "target": target, "page_count": len(rows),
+        "app_version": "0.2.0", "target": target if remove_overlays else None, "page_count": len(rows),
+        "remove_overlays": remove_overlays,
         "removed_count": removed, "pages_changed": sum(p.removed > 0 for p in rows),
         "unsupported_pages": [p.page for p in rows if p.status == "unsupported"],
         "input_sha256": sha256(data), "output_sha256": sha256(output),
-        "encryption_and_permissions_preserved": True,
+        "printing_previously_allowed": printing_was_allowed,
+        "printing_allowed": True,
+        "security_removed_for_printing": security_removed,
+        "encryption_and_permissions_preserved": not security_removed,
+        "security_note": ("Opening password, encryption, and all PDF permission restrictions removed in the output copy."
+                          if security_removed else "Existing encryption and permissions preserved."),
         "page_count_and_geometry_verified": True,
         "non_target_text_fonts_sizes_positions_verified": True,
         "pages": [asdict(p) for p in rows],

@@ -215,3 +215,91 @@ def test_analyze_is_read_only():
     data = make_pdf()
     assert analyze(data)["visible_candidate_count"] == 1
     assert clean(data).report["input_sha256"] == analyze(data)["input_sha256"]
+
+
+@pytest.mark.parametrize("encryption", [pymupdf.PDF_ENCRYPT_AES_128, pymupdf.PDF_ENCRYPT_AES_256])
+@pytest.mark.parametrize("password", ["", "open-test"])
+@pytest.mark.parametrize("permissions", [0, pymupdf.PDF_PERM_PRINT])
+def test_print_only_enables_high_quality_printing_without_content_changes(encryption, password, permissions):
+    with open_pdf(make_pdf()) as doc:
+        doc.set_metadata({"title": "Keep title"})
+        doc[0].set_rotation(90)
+        source = doc.tobytes(encryption=encryption, user_pw=password,
+                             owner_pw="owner-test", permissions=permissions)
+    result = clean(source, password=password, remove_overlays=False)
+    assert result.report["removed_count"] == 0
+    assert result.report["security_removed_for_printing"] is True
+    assert result.report["encryption_and_permissions_preserved"] is False
+    assert result.report["printing_allowed"] is True
+    assert analyze(source, password=password)["printing_allowed"] is False
+    with open_pdf(source, password) as original, open_pdf(result.pdf_bytes) as output:
+        assert not output.needs_pass
+        assert not output.metadata["encryption"]
+        assert output.permissions & pymupdf.PDF_PERM_PRINT
+        assert output.permissions & pymupdf.PDF_PERM_PRINT_HQ
+        assert output.metadata["title"] == "Keep title"
+        assert original[0].rotation == output[0].rotation == 90
+        assert original[0].read_contents() == output[0].read_contents()
+        assert original[0].get_pixmap().samples == output[0].get_pixmap().samples
+        assert "Preview" in output[0].get_text()
+        assert not (original.permissions & pymupdf.PDF_PERM_PRINT_HQ)
+
+
+def test_default_clean_also_enables_printing():
+    with open_pdf(make_pdf()) as doc:
+        source = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                             user_pw="open-test", owner_pw="owner-test", permissions=0)
+    with pytest.raises(PasswordNeeded):
+        clean(source)
+    with pytest.raises(PasswordNeeded):
+        clean(source, password="incorrect")
+    result = clean(source, password="open-test")
+    assert result.report["removed_count"] == 1
+    assert result.report["security_removed_for_printing"]
+    with open_pdf(result.pdf_bytes) as doc:
+        assert "Preview" not in doc[0].get_text()
+        assert "keep this text" in doc[0].get_text()
+
+
+def test_printable_encrypted_input_keeps_its_password_and_other_permissions():
+    permissions = pymupdf.PDF_PERM_PRINT | pymupdf.PDF_PERM_PRINT_HQ
+    with open_pdf(make_pdf()) as doc:
+        source = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                             user_pw="open-test", owner_pw="owner-test", permissions=permissions)
+    result = clean(source, password="open-test", remove_overlays=False)
+    assert result.pdf_bytes == source
+    assert result.report["encryption_and_permissions_preserved"]
+    assert not result.report["security_removed_for_printing"]
+    with pytest.raises(PasswordNeeded):
+        open_pdf(result.pdf_bytes)
+
+
+def test_print_only_still_blocks_signature_fields():
+    with open_pdf(make_pdf()) as doc:
+        doc.xref_set_key(doc.pdf_catalog(), "AcroForm", "<< /Fields [] /SigFlags 3 >>")
+        source = doc.tobytes()
+    with pytest.raises(CleanerError, match="signature fields"):
+        clean(source, remove_overlays=False)
+
+
+@pytest.mark.parametrize("print_only", [False, True])
+def test_cli_exports_when_no_overlay_is_removed(tmp_path, monkeypatch, capsys, print_only):
+    import json
+    import sys
+    from preview_cleaner.__main__ import main
+    source = tmp_path / "input.pdf"
+    output = tmp_path / "printable.pdf"
+    with open_pdf(make_pdf(fontsize=12)) as doc:
+        source.write_bytes(doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                                      owner_pw="owner-test", permissions=0))
+    original_bytes = source.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["preview_cleaner", str(source), "-o", str(output)]
+                        + (["--print-only"] if print_only else []))
+    assert main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["printing_allowed"] and report["removed_count"] == 0
+    assert source.read_bytes() == original_bytes
+    with open_pdf(output.read_bytes()) as doc:
+        assert doc.permissions & pymupdf.PDF_PERM_PRINT_HQ
+        assert "Preview" in doc[0].get_text()
+    assert main() == 1  # Still refuse overwriting an existing output.

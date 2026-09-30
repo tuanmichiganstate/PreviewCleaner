@@ -33,7 +33,7 @@ Annotation stamps and vector-outline watermarks need separate detectors and test
 - Never remove a target word just because it appears in ordinary text.
 - Never use rectangular PDF redaction to remove an overlapping watermark.
 - No automatic cloud upload, paid AI service, OCR, or image rasterization of exported pages.
-- Preserve encryption/permission settings; no password guessing. Signed PDFs are blocked by this prototype.
+- All exports enable ordinary and high-quality printing (user-requested behavior in 0.2.0). Print-restricted copies remove encryption, opening passwords, and other permission restrictions; already-printable copies preserve security. Report this explicitly. No password guessing. Signed PDFs remain blocked.
 - Verify resulting content and distinguish removed / unchanged / unsupported / failed.
 - Runtime and tests must use synthetic or authorized fixtures. Do not publish the user's example score as a public test fixture.
 
