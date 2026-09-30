@@ -1,4 +1,4 @@
-# Preview Cleaner — working source prototype 0.4.0
+# Preview Cleaner — working source prototype 0.5.0
 
 A small, local desktop app for removing **supported separate PDF text overlays**, such as the large diagonal `Preview` label in the supplied example. It has a desktop interface and a command-line interface.
 
@@ -111,7 +111,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The current suite passes 73 automated tests on macOS. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, printable copies, dropped-path handling, worker crashes/timeouts/cancellation, and the Tk event loop. The GUI tests require a graphical desktop with Tkinter. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
+The current suite passes 75 automated tests on macOS. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, printable copies, dropped-path handling, worker crashes/timeouts/cancellation, and the Tk event loop. The GUI tests require a graphical desktop with Tkinter. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
 
 `tests/fixtures` contains only synthetic PDFs from ReportLab, fpdf2, and PyMuPDF, plus a malformed file. Supported fixtures are checked for unchanged graphics and exact rendered pixels outside the removed label. Unsupported fixtures must remain byte-identical. To regenerate the corpus, install `requirements-fixtures.txt` and run `python scripts/generate_fixtures.py`; fixture-generator dependencies are not bundled into the app.
 
@@ -142,3 +142,7 @@ The local app includes a custom icon sourced from `assets/icon.svg`. See [the ma
 - pypdf generic objects: https://pypdf.readthedocs.io/en/stable/modules/generic.html
 - Tkinter: https://docs.python.org/3/library/tkinter.html
 - PyInstaller platform/build model: https://pyinstaller.org/en/stable/operating-mode.html
+
+## Interface
+
+The Google Stitch-inspired comparison workspace keeps export options and printing/security status in a sidebar. PDF details shows source metadata in a read-only window; verification details expand below the previews. Previews refit on resize, and Command-O / Command-S open and save. See [UI design](docs/UI_DESIGN.md).

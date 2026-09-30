@@ -1,4 +1,4 @@
-# Coding-agent handoff — Preview Cleaner 0.4.0
+# Coding-agent handoff — Preview Cleaner 0.5.0
 
 ## Objective
 
@@ -6,7 +6,7 @@ Turn the supplied working source prototype into a reliable local macOS/Windows d
 
 ## Implemented baseline
 
-`preview_cleaner/core.py` reads PDFs, inspects rendered text spans, parses top-level PDF text objects, applies byte-offset patches, enables printing, and verifies exported output. `gui.py` provides drag-and-drop, preview/navigation/export and JSON reporting; `jobs.py` isolates analysis in a spawned process. `__main__.py` is the CLI. The suite includes 73 automated cases and a synthetic multi-producer corpus. The frozen app has an offline `--self-test` diagnostic.
+`preview_cleaner/core.py` reads PDFs, inspects rendered text spans, parses top-level PDF text objects, applies byte-offset patches, enables printing, and verifies exported output. `gui.py` provides drag-and-drop, preview/navigation/export and JSON reporting; `jobs.py` isolates analysis in a spawned process. `__main__.py` is the CLI. The suite includes 75 automated cases and a synthetic multi-producer corpus. The frozen app has an offline `--self-test` diagnostic.
 
 The reference sample is a 12-page PDF whose page wrapper separately invokes the score Form XObject, draws a 150-pt diagonal `Preview` text object, then draws its edition footer. Only the target text-show operand is changed. Do not remove the entire page stream, Form XObject, font resource, gray content, or watermark bounding rectangle.
 

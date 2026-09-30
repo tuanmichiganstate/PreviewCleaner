@@ -17,9 +17,9 @@ from .jobs import CleaningJob
 class CleanerWindow:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Preview Cleaner — PDF text-overlay prototype")
-        self.root.geometry("1280x960")
-        self.root.minsize(960, 780)
+        self.root.title("Preview Cleaner")
+        self.root.geometry("1280x850")
+        self.root.minsize(1000, 780)
         self.path: Path | None = None
         self.data: bytes | None = None
         self.password = ""
@@ -36,67 +36,206 @@ class CleanerWindow:
         self.page_label = tk.StringVar(value="No document")
         self.security_status = tk.StringVar(value="Source printing: no document. Output printing: always enabled.")
 
-        main = ttk.Frame(root, padding=16)
-        main.pack(fill="both", expand=True)
-        ttk.Label(main, text="Preview Cleaner", font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
-        ttk.Label(main, text="Local-only removal of supported, separate text overlays — no OCR or AI.").pack(anchor="w", pady=(2, 12))
-        toolbar = ttk.Frame(main)
-        toolbar.pack(fill="x", pady=(0, 10))
-        ttk.Button(toolbar, text="Open PDF…", command=self.choose_file).pack(side="left")
-        ttk.Label(toolbar, text="Watermark text:").pack(side="left", padx=(18, 5))
-        ttk.Entry(toolbar, textvariable=self.target, width=20).pack(side="left")
-        self.process_button = ttk.Button(toolbar, text="Analyze & preview", command=self.process, state="disabled")
-        self.process_button.pack(side="left", padx=10)
-        self.save_button = ttk.Button(toolbar, text="Save new PDF…", command=self.save, state="disabled")
-        self.save_button.pack(side="left")
-        self.report_button = ttk.Button(toolbar, text="Save report…", command=self.save_report, state="disabled")
-        self.report_button.pack(side="left", padx=10)
-        ttk.Checkbutton(main, text="Remove supported text overlays", variable=self.remove_overlays).pack(anchor="w")
-        ttk.Label(main, text="Printing is always enabled in exported PDFs. Print-restricted copies lose password and other security restrictions.",
-                  wraplength=1200).pack(anchor="w", pady=(2, 8))
-        self.path_label = ttk.Label(main, text="No PDF selected", wraplength=1200)
-        self.path_label.pack(anchor="w", pady=(0, 8))
-        ttk.Label(main, textvariable=self.security_status, wraplength=1200).pack(anchor="w", pady=(0, 8))
-        progress_row = ttk.Frame(main)
-        progress_row.pack(fill="x", pady=(0, 8))
-        self.progress = ttk.Progressbar(progress_row, maximum=100)
-        self.progress.pack(side="left", fill="x", expand=True)
-        self.cancel_button = ttk.Button(progress_row, text="Cancel", command=self.cancel_processing, state="disabled")
-        self.cancel_button.pack(side="right", padx=(8, 0))
-
-        viewer = ttk.Frame(main)
-        viewer.pack(fill="both", expand=True)
-        viewer.columnconfigure(0, weight=1)
-        viewer.columnconfigure(1, weight=1)
-        viewer.rowconfigure(0, weight=1)
-        self.panels = []
-        for col, title in enumerate(("Original PDF — drop a PDF here", "Output preview")):
-            frame = ttk.LabelFrame(viewer, text=title, padding=8)
-            frame.grid(row=0, column=col, sticky="nsew", padx=(0, 6) if col == 0 else (6, 0))
-            label = ttk.Label(frame, text="Drop a PDF here or choose Open PDF" if col == 0 else "Run Analyze & preview", anchor="center")
-            label.pack(fill="both", expand=True)
-            self.panels.append(label)
-            if col == 0:
-                for widget in (frame, label):
-                    widget.drop_target_register(DND_FILES)
-                    widget.dnd_bind("<<Drop>>", self.drop_pdf)
-        nav = ttk.Frame(main)
-        nav.pack(fill="x", pady=8)
-        ttk.Button(nav, text="◀ Previous", command=lambda: self.go(-1)).pack(side="left")
-        ttk.Label(nav, textvariable=self.page_label).pack(side="left", padx=15)
-        ttk.Button(nav, text="Next ▶", command=lambda: self.go(1)).pack(side="left")
-        ttk.Button(nav, text="Fit / refresh", command=self.render).pack(side="right")
-        ttk.Label(main, textvariable=self.status, wraplength=1200).pack(anchor="w", pady=(0, 8))
-        self.log = tk.Text(main, height=5, wrap="word", state="disabled")
-        self.log.pack(fill="x")
-        ttk.Label(main, text="For documents you own or are authorized to modify. Unsupported overlays are left unchanged.").pack(anchor="w", pady=(8, 0))
+        self.render_id = None
+        self.details_visible = False
+        self.pdf_details_window = None
+        self.document_info = tk.StringVar(value="No document selected")
+        self.output_label = tk.StringVar(value="Awaiting analysis")
+        self.build_interface()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.target.trace_add("write", self.invalidate_result)
         self.remove_overlays.trace_add("write", self.invalidate_result)
 
+    def build_interface(self):
+        """Native adaptation of the Google Stitch comparison workspace."""
+        colors = {"paper": "#ffffff", "surface": "#f5f7fa", "canvas": "#e9eef3",
+                  "ink": "#123a56", "muted": "#536477", "line": "#dce3ea", "teal": "#0d7682"}
+        self.colors = colors
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure(".", font=("Helvetica Neue", 12), background=colors["surface"], foreground=colors["ink"])
+        style.configure("TFrame", background=colors["surface"])
+        style.configure("Paper.TFrame", background=colors["paper"])
+        style.configure("TLabel", background=colors["surface"])
+        style.configure("Paper.TLabel", background=colors["paper"])
+        style.configure("Muted.TLabel", foreground=colors["muted"])
+        style.configure("Title.TLabel", font=("Helvetica Neue", 19, "bold"))
+        style.configure("Section.TLabel", font=("Helvetica Neue", 11, "bold"), foreground=colors["muted"])
+        style.configure("TButton", padding=(12, 8), background=colors["paper"], bordercolor=colors["line"], borderwidth=1)
+        style.map("TButton", background=[("active", "#e9eef3")], foreground=[("disabled", "#7a8998")])
+        style.configure("Primary.TButton", background=colors["teal"], foreground="white", bordercolor=colors["teal"])
+        style.map("Primary.TButton", background=[("disabled", "#e1e7eb"), ("active", "#0b636d")],
+                  foreground=[("disabled", "#7a8998"), ("!disabled", "white")])
+        style.configure("TCheckbutton", background=colors["surface"], padding=(0, 4))
+        style.map("TCheckbutton", background=[("active", colors["surface"])])
+        style.configure("TEntry", padding=8, fieldbackground="white", bordercolor=colors["line"])
+        style.configure("Horizontal.TProgressbar", background=colors["teal"], troughcolor=colors["line"], borderwidth=0)
+        self.root.configure(background=colors["surface"])
+        header = ttk.Frame(self.root, padding=(22, 16))
+        header.pack(fill="x")
+        ttk.Label(header, text="Preview Cleaner", style="Title.TLabel").pack(side="left")
+        ttk.Label(header, text="On-device · Original stays unchanged", style="Muted.TLabel").pack(side="left", padx=22)
+        self.save_button = ttk.Button(header, text="Save new PDF…", command=self.save, state="disabled", style="Primary.TButton")
+        self.save_button.pack(side="right")
+        ttk.Button(header, text="Open PDF…", command=self.choose_file).pack(side="right", padx=10)
+        ttk.Separator(self.root).pack(fill="x")
+        body = ttk.Frame(self.root)
+        body.pack(fill="both", expand=True)
+        sidebar = ttk.Frame(body, width=292, padding=20)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        ttk.Label(sidebar, text="DOCUMENT", style="Section.TLabel").pack(anchor="w")
+        self.path_label = ttk.Label(sidebar, text="Open a PDF to begin", wraplength=250, font=("Helvetica Neue", 14, "bold"))
+        self.path_label.pack(anchor="w", pady=(10, 5))
+        ttk.Label(sidebar, textvariable=self.document_info, style="Muted.TLabel", wraplength=250).pack(anchor="w")
+        self.pdf_details_button = ttk.Button(sidebar, text="PDF details…", command=self.show_pdf_details, state="disabled")
+        self.pdf_details_button.pack(anchor="w", pady=(12, 0))
+        ttk.Separator(sidebar).pack(fill="x", pady=20)
+        ttk.Label(sidebar, text="EXPORT OPTIONS", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Checkbutton(sidebar, text="Remove text overlay", variable=self.remove_overlays).pack(anchor="w")
+        ttk.Label(sidebar, text="Overlay text", style="Muted.TLabel").pack(anchor="w", pady=(10, 4))
+        self.target_entry = ttk.Entry(sidebar, textvariable=self.target)
+        self.target_entry.pack(fill="x")
+        ttk.Label(sidebar, text="Only supported, separate text overlays are removed.", style="Muted.TLabel", wraplength=250).pack(anchor="w", pady=(8, 16))
+        security = tk.Frame(sidebar, background="#edf5f5", highlightbackground="#cfdddd", highlightthickness=1, padx=12, pady=12)
+        security.pack(fill="x")
+        tk.Label(security, text="Printing enabled · Always on", background="#edf5f5", foreground="#0b636d", font=("Helvetica Neue", 12, "bold"), anchor="w").pack(fill="x")
+        tk.Label(security, textvariable=self.security_status, background="#edf5f5", foreground=colors["ink"], wraplength=222, justify="left", anchor="w", font=("Helvetica Neue", 12)).pack(fill="x", pady=(10, 0))
+        self.process_button = ttk.Button(sidebar, text="Analyze & preview", command=self.process, state="disabled", style="Primary.TButton")
+        self.process_button.pack(fill="x", pady=(18, 0))
+        ttk.Label(sidebar, text="Use only documents you own or are authorized to modify. Scanned and unsupported marks stay unchanged.", style="Muted.TLabel", wraplength=250).pack(side="bottom", anchor="w", pady=(12, 0))
+        ttk.Separator(body, orient="vertical").pack(side="left", fill="y")
+        workspace = ttk.Frame(body, padding=(20, 18))
+        workspace.pack(side="left", fill="both", expand=True)
+        ttk.Label(workspace, text="Compare pages", font=("Helvetica Neue", 17, "bold")).pack(anchor="w")
+        ttk.Label(workspace, text="Review the printable copy before saving.", style="Muted.TLabel").pack(anchor="w", pady=(4, 18))
+        viewer = ttk.Frame(workspace)
+        viewer.pack(fill="both", expand=True)
+        viewer.columnconfigure((0, 1), weight=1, uniform="preview")
+        viewer.rowconfigure(0, weight=1)
+        self.panels = []
+        for col, title in enumerate(("Original PDF", "Output preview")):
+            frame = ttk.Frame(viewer, style="Paper.TFrame")
+            frame.grid(row=0, column=col, sticky="nsew", padx=(0, 7) if col == 0 else (7, 0))
+            frame.grid_propagate(False)
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(2, weight=1)
+            ttk.Label(frame, text=title, style="Paper.TLabel", font=("Helvetica Neue", 13, "bold"), padding=(14, 12)).grid(row=0, column=0, sticky="ew")
+            ttk.Label(frame, text="Drop a PDF here to open or replace" if col == 0 else "", textvariable=self.output_label if col else None,
+                      style="Paper.TLabel", foreground=colors["muted"], padding=(14, 0, 14, 12)).grid(row=1, column=0, sticky="ew")
+            stage = tk.Frame(frame, background=colors["canvas"])
+            stage.grid(row=2, column=0, sticky="nsew")
+            label = tk.Label(stage, background=colors["canvas"], foreground=colors["muted"], font=("Helvetica Neue", 15), justify="center")
+            label.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.panels.append(label)
+            if col == 0:
+                for widget in (frame, stage, label):
+                    widget.drop_target_register(DND_FILES)
+                    widget.dnd_bind("<<Drop>>", self.drop_pdf)
+        viewer.bind("<Configure>", self.schedule_render)
+        nav = ttk.Frame(workspace, padding=(0, 12))
+        nav.pack(fill="x")
+        self.previous_button = ttk.Button(nav, text="‹ Previous", command=lambda: self.go(-1), state="disabled")
+        self.previous_button.pack(side="left")
+        ttk.Label(nav, textvariable=self.page_label).pack(side="left", padx=14)
+        self.next_button = ttk.Button(nav, text="Next ›", command=lambda: self.go(1), state="disabled")
+        self.next_button.pack(side="left")
+        ttk.Button(nav, text="Fit page", command=self.render).pack(side="right")
+        details_header = ttk.Frame(workspace)
+        details_header.pack(fill="x")
+        self.details_button = ttk.Button(details_header, text="▸ Verification details", command=self.toggle_details)
+        self.details_button.pack(side="left")
+        self.report_button = ttk.Button(details_header, text="Save report…", command=self.save_report, state="disabled")
+        self.report_button.pack(side="right")
+        self.details_frame = ttk.Frame(workspace, padding=(0, 8, 0, 0))
+        self.log = tk.Text(self.details_frame, height=5, wrap="word", state="disabled", background="white", foreground=colors["ink"],
+                           font=("Helvetica Neue", 12), relief="flat", padx=12, pady=10)
+        self.log.pack(side="left", fill="both", expand=True)
+        scrollbar = ttk.Scrollbar(self.details_frame, command=self.log.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.log.configure(yscrollcommand=scrollbar.set)
+        ttk.Separator(self.root).pack(fill="x")
+        footer = ttk.Frame(self.root, padding=(22, 12))
+        footer.pack(fill="x")
+        self.status_label = ttk.Label(footer, textvariable=self.status, wraplength=940)
+        self.status_label.pack(side="left", fill="x", expand=True)
+        self.progress_row = ttk.Frame(footer)
+        self.progress = ttk.Progressbar(self.progress_row, maximum=100, length=130)
+        self.progress.pack(side="left", padx=10)
+        self.cancel_button = ttk.Button(self.progress_row, text="Cancel", command=self.cancel_processing, state="disabled")
+        self.cancel_button.pack(side="right")
+        footer.bind("<Configure>", lambda event: self.status_label.configure(wraplength=max(400, event.width - 290)))
+        self.root.bind("<Command-o>", lambda event: self.choose_file())
+        self.root.bind("<Command-s>", lambda event: self.save())
+        self.note("Open a PDF, choose your options, then analyze. Verification results appear here.")
+        self.render()
+
+    def show_pdf_details(self):
+        if self.original is None:
+            return
+        if self.pdf_details_window is not None and self.pdf_details_window.winfo_exists():
+            self.pdf_details_window.lift()
+            return
+        dialog = tk.Toplevel(self.root)
+        self.pdf_details_window = dialog
+        dialog.title("PDF details")
+        dialog.geometry("640x590")
+        dialog.minsize(480, 400)
+        dialog.transient(self.root)
+        container = ttk.Frame(dialog, padding=22)
+        container.pack(fill="both", expand=True)
+        ttk.Label(container, text="PDF details", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(container, text="Original document · Read only", style="Muted.TLabel").pack(anchor="w", pady=(4, 16))
+        ttk.Button(container, text="Done", command=dialog.destroy).pack(side="bottom", anchor="e", pady=(14, 0))
+        body = ttk.Frame(container)
+        body.pack(fill="both", expand=True)
+        details = tk.Text(body, wrap="word", background="white", foreground=self.colors["ink"],
+                          relief="flat", padx=16, pady=14, font=("Helvetica Neue", 13))
+        details.pack(side="left", fill="both", expand=True)
+        scrollbar = ttk.Scrollbar(body, command=details.yview)
+        scrollbar.pack(side="right", fill="y")
+        details.configure(yscrollcommand=scrollbar.set)
+        details.tag_configure("label", font=("Helvetica Neue", 11, "bold"), foreground=self.colors["muted"])
+        doc = self.original
+        metadata = doc.metadata or {}
+        first = doc[0].rect
+        quality = "High-quality printing allowed" if printing_allowed(doc) else ("Low-quality printing only" if doc.permissions & pymupdf.PDF_PERM_PRINT else "Printing blocked")
+        fields = [("FILE", self.path.name), ("LOCATION", str(self.path.resolve())),
+                  ("SIZE", f"{len(self.data):,} bytes ({len(self.data) / 1024 / 1024:.2f} MB)"),
+                  ("PAGES", str(len(doc))), ("FIRST PAGE SIZE", f"{first.width:g} × {first.height:g} pt"),
+                  ("FORMAT", metadata.get("format")), ("TITLE", metadata.get("title")),
+                  ("AUTHOR", metadata.get("author")), ("CREATOR", metadata.get("creator")),
+                  ("PRODUCER", metadata.get("producer")), ("CREATED (PDF METADATA)", metadata.get("creationDate")),
+                  ("MODIFIED (PDF METADATA)", metadata.get("modDate")),
+                  ("ENCRYPTION", metadata.get("encryption") or "None"),
+                  ("OPENING PASSWORD", "Required" if doc.needs_pass else "Not required"),
+                  ("SOURCE PRINTING", quality),
+                  ("EXPORT SECURITY", "Existing password and security retained." if printing_allowed(doc) else
+                   "Opening password, encryption and other restrictions removed to enable high-quality printing.")]
+        for label, value in fields:
+            details.insert("end", label + "\n", "label")
+            details.insert("end", str(value or "Not specified") + "\n\n")
+        details.configure(state="disabled")
+        dialog.bind("<Escape>", lambda event: dialog.destroy())
+
+    def toggle_details(self):
+        self.details_visible = not self.details_visible
+        if self.details_visible:
+            self.details_frame.pack(fill="x")
+        else:
+            self.details_frame.pack_forget()
+        self.details_button.configure(text=("▾" if self.details_visible else "▸") + " Verification details")
+
+    def schedule_render(self, event=None):
+        if self.render_id is not None:
+            self.root.after_cancel(self.render_id)
+        self.render_id = self.root.after(150, self.render)
+
     def invalidate_result(self, *_):
         self.cancel_processing(quiet=True)
         self.result = None
+        self.output_label.set("Awaiting analysis")
+        self.target_entry.configure(state="normal" if self.remove_overlays.get() else "disabled")
         if self.output is not None:
             self.output.close()
             self.output = None
@@ -153,17 +292,20 @@ class CleanerWindow:
             self.path, self.data, self.password = path, data, password
             self.original, self.output, self.result = new_doc, None, None
             self.page = 0
-            self.path_label.configure(text=str(path))
+            self.path_label.configure(text=path.name)
+            self.document_info.set(f"{len(new_doc)} {'page' if len(new_doc) == 1 else 'pages'} · {len(data) / 1024:,.0f} KB")
+            self.pdf_details_button.configure(state="normal")
+            self.output_label.set("Awaiting analysis")
             self.process_button.configure(state="normal")
             self.save_button.configure(state="disabled")
             self.report_button.configure(state="disabled")
-            self.status.set(f"Loaded {len(self.original)} pages. Analyze before saving.")
+            self.status.set("PDF loaded. Choose Analyze & preview before saving.")
             if printing_allowed(new_doc):
-                self.security_status.set("Source: high-quality printing allowed. Output: printing enabled; existing password/security retained.")
+                self.security_status.set("Source: high-quality printing allowed.\n\nExport: printing enabled; existing password and security retained.")
             else:
                 quality = "low-quality printing only" if new_doc.permissions & pymupdf.PDF_PERM_PRINT else "printing blocked"
-                self.security_status.set(f"Source: {quality}. Output: high-quality printing enabled; password, encryption and other restrictions removed.")
-            self.note("The first version handles large diagonal text labels in separate top-level PDF text objects. Scanned/image watermarks are not reconstructed.")
+                self.security_status.set(f"Source: {quality}.\n\nExport: high-quality printing enabled; opening password, encryption and other restrictions removed.")
+            self.note("Supports large diagonal text labels in separate PDF text objects. Scanned/image watermarks are left unchanged.")
             self.render()
         except Exception as exc:
             if new_doc is not None and new_doc is not self.original:
@@ -179,6 +321,8 @@ class CleanerWindow:
             self.job = CleaningJob(self.data, self.target.get(), self.password, self.remove_overlays.get())
             self.process_button.configure(state="disabled")
             self.cancel_button.configure(state="normal")
+            self.progress_row.pack(side="right")
+            self.output_label.set("Processing…")
             self.poll_id = self.root.after(50, self.poll_processing)
         except Exception as exc:
             self.status.set("Could not start processing. No file has been saved.")
@@ -193,6 +337,9 @@ class CleanerWindow:
             self.job.close()
             self.job = None
         self.cancel_button.configure(state="disabled")
+        self.progress_row.pack_forget()
+        if was_running:
+            self.output_label.set("Analysis cancelled")
         self.process_button.configure(state="normal" if self.data is not None else "disabled")
         self.progress.configure(value=0)
         if was_running and not quiet:
@@ -217,6 +364,7 @@ class CleanerWindow:
                     self.cancel_button.configure(state="disabled")
                     self.process_button.configure(state="normal")
                     self.progress.configure(value=100)
+                    self.progress_row.pack_forget()
                     self.show_result(message[1])
                     return
             self.poll_id = self.root.after(50, self.poll_processing)
@@ -233,6 +381,7 @@ class CleanerWindow:
             self.result, self.output = result, new_output
             report = result.report
             changed = report["removed_count"]
+            self.output_label.set("Printable · Review unchanged marks" if report["unsupported_pages"] else "Printable · Ready to review")
             self.save_button.configure(state="normal")
             self.report_button.configure(state="normal")
             self.status.set(f"Printable copy ready. Removed {changed} overlay(s) on {report['pages_changed']} of {report['page_count']} pages. Review before export.")
@@ -247,20 +396,26 @@ class CleanerWindow:
             messagebox.showerror("Could not process PDF", str(exc))
 
     def render(self):
+        if self.render_id is not None:
+            self.root.after_cancel(self.render_id)
+            self.render_id = None
         self.images = []
-        for label, document in zip(self.panels, (self.original, self.output)):
+        for index, (label, document) in enumerate(zip(self.panels, (self.original, self.output))):
             if document is None:
-                label.configure(image="", text="Run Analyze & preview" if self.original else "Drop a PDF here or choose Open PDF")
+                label.configure(image="", text="Drop your PDF here\n\nor choose Open PDF" if index == 0 else "Your printable preview\nwill appear here\n\nChoose Analyze & preview")
                 continue
             page = document[self.page]
-            width = max(300, label.winfo_width() - 12)
-            height = max(380, label.winfo_height() - 12)
+            width = max(50, label.winfo_width() - 32)
+            height = max(50, label.winfo_height() - 32)
             scale = min(width / page.rect.width, height / page.rect.height, 1.75)
             pixmap = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
             image = tk.PhotoImage(data=base64.b64encode(pixmap.tobytes("png")))
             label.configure(image=image, text="")
             self.images.append(image)
         self.page_label.set(f"Page {self.page + 1} of {len(self.original)}" if self.original is not None else "No document")
+
+        self.previous_button.configure(state="normal" if self.original is not None and self.page > 0 else "disabled")
+        self.next_button.configure(state="normal" if self.original is not None and self.page < len(self.original) - 1 else "disabled")
 
     def go(self, step: int):
         if self.original is not None:
@@ -296,12 +451,18 @@ class CleanerWindow:
                 messagebox.showerror("Could not save report", str(exc))
 
     def close_documents(self):
+        if self.pdf_details_window is not None and self.pdf_details_window.winfo_exists():
+            self.pdf_details_window.destroy()
+        self.pdf_details_window = None
         for document in (self.original, self.output):
             if document is not None:
                 document.close()
         self.original = self.output = None
 
     def close(self):
+        if self.render_id is not None:
+            self.root.after_cancel(self.render_id)
+            self.render_id = None
         self.cancel_processing(quiet=True)
         self.close_documents()
         self.root.destroy()

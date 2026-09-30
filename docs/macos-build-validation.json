@@ -1,6 +1,6 @@
 {
-  "built_at_utc": "2026-09-30T03:44:28.457610+00:00",
-  "app_version": "0.4.0",
+  "built_at_utc": "2026-09-30T04:05:18.087081+00:00",
+  "app_version": "0.5.0",
   "architecture": "arm64",
   "macos_tested": "26.6.2",
   "minimum_macos": "26.0",
@@ -9,10 +9,10 @@
   "dependency_lock": "requirements-build-macos.txt",
   "app": "dist/PreviewCleaner.app",
   "archive": "dist/PreviewCleaner-macOS-arm64.zip",
-  "archive_bytes": 35901782,
-  "archive_sha256": "cf2ae8586c23d5f25e570e145ab9fcfd1f5dd2d5e712630ab0f0887bc4b433ee",
+  "archive_bytes": 35909624,
+  "archive_sha256": "a4c07845c776bedb0cf37ab957ffcef3e3aa3ec15456db8878862ef23e5a8f85",
   "automated_tests": {
-    "passed": 73,
+    "passed": 75,
     "failed": 0,
     "warnings": 5
   },
@@ -47,7 +47,7 @@
   ],
   "code_signature": "ad-hoc; codesign --verify --deep --strict passed",
   "packaged_self_test": {
-    "app_version": "0.4.0",
+    "app_version": "0.5.0",
     "macos": "26.6.2",
     "architecture": "arm64",
     "checks": [
@@ -61,11 +61,21 @@
       "worker cancellation and temporary-file cleanup"
     ],
     "passed": true,
-    "location": "Relocated bundle outside repository; same Mac, not a clean-Mac test."
+    "location": "Final bundled executable on development Mac; not clean-Mac acceptance."
   },
   "dependency_audit": {
     "mach_o_files_checked": 63,
-    "non_system_absolute_dependencies": 0
+    "non_system_absolute_dependencies": 0,
+    "app_version": "0.4.0 (dependencies unchanged in 0.5.0)"
   },
-  "visual_qa": "Poppler-rendered ReportLab fixture before/after inspected: overlay removed; body text and rectangle preserved."
+  "visual_qa": "Poppler-rendered ReportLab fixture before/after inspected: overlay removed; body text and rectangle preserved.",
+  "ui_checks": [
+    "Stitch-generated design adapted to native Tkinter.",
+    "Packaged app empty, loaded, completed comparison and read-only PDF details visually checked.",
+    "Keyboard open, PDF details and analysis exercised with synthetic fixture.",
+    "Automatic tests cover read-only details, closing details on document replacement, disabled boundary navigation and print-only field state."
+  ],
+  "validation_notes": [
+    "An earlier 75-pass run logged an intermittent child-process startup segmentation fault during immediate cancellation. Final repeat passed 75 tests with no crash output; packaged self-test passed. Monitor cancellation/startup stability on clean-Mac acceptance."
+  ]
 }

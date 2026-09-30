@@ -77,3 +77,38 @@ def test_loading_new_document_cancels_previous_job(window, tmp_path):
     window.load_path(second)
     assert window.path == second and window.job is None
     assert not folder.exists() and window.result is None
+
+
+def test_pdf_details_are_read_only_and_close_on_replacement(window, tmp_path):
+    source = tmp_path / "metadata.pdf"
+    source.write_bytes(make_pdf())
+    window.load_path(source)
+    window.show_pdf_details()
+    dialog = window.pdf_details_window
+    assert dialog.winfo_exists()
+    def text_widgets(widget):
+        for child in widget.winfo_children():
+            if isinstance(child, gui.tk.Text):
+                yield child
+            yield from text_widgets(child)
+    details = list(text_widgets(dialog))[0]
+    assert str(details["state"]) == "disabled"
+    content = details.get("1.0", "end")
+    assert "metadata.pdf" in content and "SOURCE PRINTING" in content
+    assert "CREATOR" in content and "PRODUCER" in content
+    window.load_path(source)
+    assert not dialog.winfo_exists()
+
+
+def test_navigation_and_overlay_controls_follow_document_state(window, tmp_path):
+    assert str(window.pdf_details_button["state"]) == "disabled"
+    source = tmp_path / "one-page.pdf"
+    source.write_bytes(make_pdf())
+    window.load_path(source)
+    assert str(window.pdf_details_button["state"]) == "normal"
+    assert str(window.previous_button["state"]) == "disabled"
+    assert str(window.next_button["state"]) == "disabled"
+    window.remove_overlays.set(False)
+    assert str(window.target_entry["state"]) == "disabled"
+    window.remove_overlays.set(True)
+    assert str(window.target_entry["state"]) == "normal"
