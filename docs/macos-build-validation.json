@@ -1,6 +1,6 @@
 {
-  "built_at_utc": "2026-09-30T04:05:18.087081+00:00",
-  "app_version": "0.5.0",
+  "built_at_utc": "2026-09-30T04:15:44.589315+00:00",
+  "app_version": "0.6.0",
   "architecture": "arm64",
   "macos_tested": "26.6.2",
   "minimum_macos": "26.0",
@@ -9,10 +9,10 @@
   "dependency_lock": "requirements-build-macos.txt",
   "app": "dist/PreviewCleaner.app",
   "archive": "dist/PreviewCleaner-macOS-arm64.zip",
-  "archive_bytes": 35909624,
-  "archive_sha256": "a4c07845c776bedb0cf37ab957ffcef3e3aa3ec15456db8878862ef23e5a8f85",
+  "archive_bytes": 35917334,
+  "archive_sha256": "4c7aece73088b0826879990e7ace0a0b556eb5d328ed0c1af784626f8f252e53",
   "automated_tests": {
-    "passed": 75,
+    "passed": 77,
     "failed": 0,
     "warnings": 5
   },
@@ -47,7 +47,7 @@
   ],
   "code_signature": "ad-hoc; codesign --verify --deep --strict passed",
   "packaged_self_test": {
-    "app_version": "0.5.0",
+    "app_version": "0.6.0",
     "macos": "26.6.2",
     "architecture": "arm64",
     "checks": [
@@ -60,8 +60,7 @@
       "page rendering",
       "worker cancellation and temporary-file cleanup"
     ],
-    "passed": true,
-    "location": "Final bundled executable on development Mac; not clean-Mac acceptance."
+    "passed": true
   },
   "dependency_audit": {
     "mach_o_files_checked": 63,
@@ -73,9 +72,11 @@
     "Stitch-generated design adapted to native Tkinter.",
     "Packaged app empty, loaded, completed comparison and read-only PDF details visually checked.",
     "Keyboard open, PDF details and analysis exercised with synthetic fixture.",
-    "Automatic tests cover read-only details, closing details on document replacement, disabled boundary navigation and print-only field state."
+    "Automatic tests cover read-only details, closing details on document replacement, disabled boundary navigation and print-only field state.",
+    "0.6.0 packaged app: double-click enters full screen, keyboard zoom changes 96% to 121%, Escape returns to comparison.",
+    "Viewer regression tests cover fit width, navigation, retained scale when switching sources, unavailable output and cleanup on document/option replacement."
   ],
   "validation_notes": [
-    "An earlier 75-pass run logged an intermittent child-process startup segmentation fault during immediate cancellation. Final repeat passed 75 tests with no crash output; packaged self-test passed. Monitor cancellation/startup stability on clean-Mac acceptance."
+    "77 tests passed; intermittent child-process startup segmentation-fault output recurred during the immediate-timeout test. Packaged self-test passed. Worker-startup stability remains a separate known issue."
   ]
 }

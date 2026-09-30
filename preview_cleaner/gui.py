@@ -12,6 +12,7 @@ from tkinterdnd2 import COPY, DND_FILES, REFUSE_DROP, TkinterDnD
 
 from .core import CleanerError, PasswordNeeded, open_pdf, printing_allowed, read_pdf, save_new
 from .jobs import CleaningJob
+from .viewer import PageViewer
 
 
 class CleanerWindow:
@@ -39,6 +40,7 @@ class CleanerWindow:
         self.render_id = None
         self.details_visible = False
         self.pdf_details_window = None
+        self.page_viewer = None
         self.document_info = tk.StringVar(value="No document selected")
         self.output_label = tk.StringVar(value="Awaiting analysis")
         self.build_interface()
@@ -114,13 +116,19 @@ class CleanerWindow:
         viewer.columnconfigure((0, 1), weight=1, uniform="preview")
         viewer.rowconfigure(0, weight=1)
         self.panels = []
+        self.expand_buttons = []
         for col, title in enumerate(("Original PDF", "Output preview")):
             frame = ttk.Frame(viewer, style="Paper.TFrame")
             frame.grid(row=0, column=col, sticky="nsew", padx=(0, 7) if col == 0 else (7, 0))
             frame.grid_propagate(False)
             frame.columnconfigure(0, weight=1)
             frame.rowconfigure(2, weight=1)
-            ttk.Label(frame, text=title, style="Paper.TLabel", font=("Helvetica Neue", 13, "bold"), padding=(14, 12)).grid(row=0, column=0, sticky="ew")
+            pane_header = ttk.Frame(frame, style="Paper.TFrame", padding=(14, 8))
+            pane_header.grid(row=0, column=0, sticky="ew")
+            ttk.Label(pane_header, text=title, style="Paper.TLabel", font=("Helvetica Neue", 13, "bold")).pack(side="left")
+            expand = ttk.Button(pane_header, text="Expand", command=lambda source=col: self.expand_page(source), state="disabled")
+            expand.pack(side="right")
+            self.expand_buttons.append(expand)
             ttk.Label(frame, text="Drop a PDF here to open or replace" if col == 0 else "", textvariable=self.output_label if col else None,
                       style="Paper.TLabel", foreground=colors["muted"], padding=(14, 0, 14, 12)).grid(row=1, column=0, sticky="ew")
             stage = tk.Frame(frame, background=colors["canvas"])
@@ -128,6 +136,7 @@ class CleanerWindow:
             label = tk.Label(stage, background=colors["canvas"], foreground=colors["muted"], font=("Helvetica Neue", 15), justify="center")
             label.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.panels.append(label)
+            label.bind("<Double-Button-1>", lambda event, source=col: self.expand_page(source))
             if col == 0:
                 for widget in (frame, stage, label):
                     widget.drop_target_register(DND_FILES)
@@ -169,6 +178,20 @@ class CleanerWindow:
         self.root.bind("<Command-s>", lambda event: self.save())
         self.note("Open a PDF, choose your options, then analyze. Verification results appear here.")
         self.render()
+
+    def expand_page(self, source=0):
+        if (self.output if source else self.original) is None:
+            return
+        if self.page_viewer is not None:
+            self.page_viewer.source.set(source)
+            self.page_viewer.render()
+            self.page_viewer.window.lift()
+        else:
+            self.page_viewer = PageViewer(self, source)
+
+    def close_page_viewer(self):
+        if self.page_viewer is not None:
+            self.page_viewer.close(refresh=False)
 
     def show_pdf_details(self):
         if self.original is None:
@@ -232,6 +255,7 @@ class CleanerWindow:
         self.render_id = self.root.after(150, self.render)
 
     def invalidate_result(self, *_):
+        self.close_page_viewer()
         self.cancel_processing(quiet=True)
         self.result = None
         self.output_label.set("Awaiting analysis")
@@ -400,6 +424,8 @@ class CleanerWindow:
             self.root.after_cancel(self.render_id)
             self.render_id = None
         self.images = []
+        for button, document in zip(self.expand_buttons, (self.original, self.output)):
+            button.configure(state="normal" if document is not None else "disabled")
         for index, (label, document) in enumerate(zip(self.panels, (self.original, self.output))):
             if document is None:
                 label.configure(image="", text="Drop your PDF here\n\nor choose Open PDF" if index == 0 else "Your printable preview\nwill appear here\n\nChoose Analyze & preview")
@@ -451,6 +477,7 @@ class CleanerWindow:
                 messagebox.showerror("Could not save report", str(exc))
 
     def close_documents(self):
+        self.close_page_viewer()
         if self.pdf_details_window is not None and self.pdf_details_window.winfo_exists():
             self.pdf_details_window.destroy()
         self.pdf_details_window = None

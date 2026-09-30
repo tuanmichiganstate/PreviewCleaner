@@ -112,3 +112,44 @@ def test_navigation_and_overlay_controls_follow_document_state(window, tmp_path)
     assert str(window.target_entry["state"]) == "disabled"
     window.remove_overlays.set(True)
     assert str(window.target_entry["state"]) == "normal"
+
+
+def test_expanded_view_preserves_zoom_and_page_across_sources(window, tmp_path):
+    from preview_cleaner.viewer import PageViewer
+    source = tmp_path / 'viewer.pdf'
+    with open_pdf(make_pdf()) as document:
+        document.new_page()
+        source.write_bytes(document.tobytes())
+    window.load_path(source)
+    window.output = open_pdf(source.read_bytes())
+    viewer = PageViewer(window, fullscreen=False)
+    window.page_viewer = viewer
+    window.root.update()
+    viewer.zoom(1.25)
+    scale = viewer.scale
+    viewer.go(1)
+    viewer.source.set(1)
+    viewer.render()
+    assert window.page == 1 and viewer.scale == scale
+    assert str(viewer.next['state']) == 'disabled'
+    viewer.go(-1)
+    viewer.fit('width')
+    assert viewer.image is not None and viewer.mode == 'width'
+    viewer.close()
+    assert window.page_viewer is None and window.page == 0
+
+
+def test_expanded_view_closes_before_document_invalidation(window, tmp_path):
+    from preview_cleaner.viewer import PageViewer
+    source = tmp_path / 'viewer.pdf'
+    source.write_bytes(make_pdf())
+    window.load_path(source)
+    viewer = PageViewer(window, fullscreen=False)
+    window.page_viewer = viewer
+    assert str(viewer.output_button['state']) == 'disabled'
+    window.target.set('Draft')
+    assert viewer.closed and window.page_viewer is None
+    viewer = PageViewer(window, fullscreen=False)
+    window.page_viewer = viewer
+    window.load_path(source)
+    assert viewer.closed and window.page_viewer is None
