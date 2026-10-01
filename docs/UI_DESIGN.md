@@ -11,3 +11,7 @@ The PDF details window closes when its document is replaced. The overlay field d
 Palette: navy #123a56, teal #0d7682, workspace #f5f7fa, preview canvas #e9eef3, border #dce3ea, muted text #536477.
 
 Full-screen inspection is available from each pane’s Expand button or a double-click. Original/output switching preserves page, zoom and pan. Fit page/width, zoom, scrollbars, drag-to-pan, arrow navigation and Escape are supported. Replacing a document or invalidating its result closes the viewer before document resources are released.
+
+## October UX review
+
+[Fresh Stitch review project](https://stitch.withgoogle.com/projects/10824163750815707449). Version 0.7 adopts persistent outcome warnings, direct page entry in both viewers, Save printable copy wording, grouped read-only PDF metadata with readable complete timestamps, and a high-contrast full-screen source selector and heading. Unsupported-page warnings stay visible even when viewing another page; export remains available after verified processing. Invalid page text keeps the current page; numeric entries clamp to document bounds. Unknown or partial PDF dates remain unchanged rather than inventing date components or time zones.

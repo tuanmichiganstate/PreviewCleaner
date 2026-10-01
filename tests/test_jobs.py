@@ -59,9 +59,59 @@ def test_timeout_stops_worker():
 def test_crashed_worker_is_detected():
     job = CleaningJob(make_pdf(), "Preview", "", True)
     job.process.kill()
-    job.process.join(timeout=2)
+    job.process.wait(timeout=2)
     try:
         assert finish(job)[-1][0] == "error"
         assert not job.folder.exists()
     finally:
         job.close()
+
+
+def test_rapid_cancellation_after_tk_initialization():
+    import signal
+    from tkinterdnd2 import TkinterDnD
+    root = TkinterDnD.Tk()
+    root.withdraw()
+    root.update()
+    try:
+        for _ in range(50):
+            job = CleaningJob(make_pdf(), 'Preview', '', True)
+            job.close()
+            assert job.process.returncode in (0, -signal.SIGTERM, -signal.SIGKILL)
+            assert not job.folder.exists()
+    finally:
+        root.destroy()
+
+
+def test_worker_password_never_in_command_arguments():
+    from preview_cleaner.core import open_pdf
+    import pymupdf
+    with open_pdf(make_pdf()) as doc:
+        data = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                           owner_pw='owner-test', user_pw='secret-test', permissions=0)
+    job = CleaningJob(data, 'Preview', 'secret-test', True)
+    try:
+        assert 'secret-test' not in repr(job.process.args)
+        assert finish(job)[-1][0] == 'done'
+        assert job.process.returncode == 0
+    finally:
+        job.close()
+
+
+def test_start_failure_removes_private_files(monkeypatch):
+    from preview_cleaner import jobs
+    import pytest
+    folders = []
+    original = jobs.TemporaryDirectory
+    def storage(**kwargs):
+        folder = original(**kwargs)
+        folders.append(folder.name)
+        return folder
+    monkeypatch.setattr(jobs, 'TemporaryDirectory', storage)
+    def fail(*args, **kwargs):
+        raise OSError('Synthetic launch failure')
+    monkeypatch.setattr(jobs.subprocess, 'Popen', fail)
+    with pytest.raises(OSError, match='Synthetic launch failure'):
+        CleaningJob(make_pdf(), 'Preview', '', True)
+    from pathlib import Path
+    assert folders and not Path(folders[0]).exists()

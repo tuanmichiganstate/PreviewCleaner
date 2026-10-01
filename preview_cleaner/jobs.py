@@ -1,95 +1,111 @@
-"""Disposable PDF worker processes; document bytes never go to logs or telemetry."""
+"""Disposable headless workers with private files and bounded lifetime."""
 from __future__ import annotations
 
 import json
-import multiprocessing as mp
+import os
 from pathlib import Path
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 from time import monotonic
 
-from .core import Result, clean, read_pdf
-
-
-def _run(folder: str, target: str, password: str, remove_overlays: bool, sender):
-    try:
-        root = Path(folder)
-        result = clean(read_pdf(root / "input.pdf"), target, password,
-                       remove_overlays=remove_overlays,
-                       progress=lambda phase, done, total: sender.send(("progress", phase, done, total)))
-        (root / "output.pdf").write_bytes(result.pdf_bytes)
-        (root / "report.json").write_text(json.dumps(result.report), encoding="utf-8")
-        sender.send(("done",))
-    except Exception as exc:
-        sender.send(("error", str(exc)))
-    finally:
-        sender.close()
+from .core import Result
 
 
 class CleaningJob:
-    """One isolated job with bounded lifetime and parent-owned private storage."""
     def __init__(self, data: bytes, target: str, password: str, remove_overlays: bool,
                  timeout: float = 300):
-        self.storage = TemporaryDirectory(prefix="preview-cleaner-")
+        self.storage = TemporaryDirectory(prefix='preview-cleaner-')
         self.folder = Path(self.storage.name)
         self.closed = False
         self.started = monotonic()
         self.timeout = timeout
-        context = mp.get_context("spawn")
-        self.receiver, sender = context.Pipe(duplex=False)
-        self.process = context.Process(target=_run, args=(str(self.folder), target, password,
-                                                        remove_overlays, sender), daemon=True)
+        self.process = None
+        self.receiver = None
+        self.buffer = b''
         try:
-            (self.folder / "input.pdf").write_bytes(data)
-            self.process.start()
+            request = json.dumps(dict(target=target, password=password,
+                                      remove_overlays=remove_overlays)).encode('utf-8')
+            if len(request) > 4096:
+                raise ValueError('Overlay text or password is too long.')
+            (self.folder / 'input.pdf').write_bytes(data)
+            self.receiver = (self.folder / 'events.jsonl').open('w+b', buffering=0)
+            if getattr(sys, 'frozen', False):
+                command = [sys.executable, '--pdf-worker', str(self.folder)]
+            else:
+                command = [sys.executable, '-m', 'preview_cleaner.worker', str(self.folder)]
+            environment = os.environ.copy()
+            if not getattr(sys, 'frozen', False):
+                # Work from any current directory, without importing a GUI main module.
+                environment['PYTHONPATH'] = str(Path(__file__).resolve().parent.parent)
+            self.process = subprocess.Popen(
+                command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                env=environment,
+                # Python 3.12 requires this to use posix_spawn on macOS. Python-opened
+                # descriptors are non-inheritable; no pass_fds/preexec_fn/cwd are used.
+                # Avoid forked Cocoa state and inherited Tk signal-handler execution.
+                close_fds=sys.platform != 'darwin',
+            )
+            try:
+                self.process.stdin.write(request)
+                self.process.stdin.close()
+            except BrokenPipeError:
+                # poll() reports the failed startup, without leaking the request.
+                self.process.stdin.close()
         except Exception:
-            self.receiver.close()
-            self.storage.cleanup()
+            self.close()
             raise
-        finally:
-            sender.close()
 
     def poll(self):
-        """Return small progress messages, a Result, or a terminal error."""
         if self.closed:
             return []
         if monotonic() - self.started > self.timeout:
             self.close()
-            return [("error", "Processing exceeded five minutes. Try a smaller PDF.")]
+            return [('error', 'Processing exceeded five minutes. Try a smaller PDF.')]
         messages = []
-        while self.receiver.poll():
-            try:
-                message = self.receiver.recv()
-            except EOFError:
-                self.close()
-                return messages + [("error", "The PDF worker exited unexpectedly. No file was saved.")]
-            if message[0] == "done":
+        # Snapshot exit first, then drain: a terminal event written before exit must
+        # be consumed before reporting an unexpected exit.
+        exited = self.process.poll() is not None
+        self.buffer += self.receiver.read(65536)
+        lines = self.buffer.split(b'\n')
+        self.buffer = lines.pop()
+        for line in lines:
+            message = json.loads(line)
+            if message[0] == 'done':
                 try:
-                    result = Result((self.folder / "output.pdf").read_bytes(),
-                                    json.loads((self.folder / "report.json").read_text(encoding="utf-8")))
-                    return messages + [("done", result)]
+                    result = Result((self.folder / 'output.pdf').read_bytes(),
+                                    json.loads((self.folder / 'report.json').read_text(encoding='utf-8')))
+                    return messages + [('done', result)]
                 finally:
-                    self.close()
-            if message[0] == "error":
-                self.close()
-                return messages + [message]
-            messages.append(message)
-        if not self.process.is_alive():
-            # Check again next poll: the final message may have arrived after poll().
-            if not self.receiver.poll():
-                self.close()
-                return messages + [("error", "The PDF worker exited unexpectedly. No file was saved.")]
+                    self.close(completed=True)
+            if message[0] == 'error':
+                self.close(completed=True)
+                return messages + [tuple(message)]
+            messages.append(tuple(message))
+        if exited and self.receiver.tell() == (self.folder / 'events.jsonl').stat().st_size:
+            self.close()
+            return messages + [('error', 'The PDF worker exited unexpectedly. No file was saved.')]
         return messages
 
-    def close(self):
+    def close(self, completed=False):
         if self.closed:
             return
         self.closed = True
-        if self.process.is_alive():
-            self.process.terminate()
-        self.process.join(timeout=0.2)
-        if self.process.is_alive():
-            self.process.kill()
-            self.process.join(timeout=0.2)
-        self.receiver.close()
-        self.process.close()
+        if self.process is not None:
+            if completed:
+                try:
+                    self.process.wait(timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    pass
+            if self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+            if self.process.stdin is not None:
+                self.process.stdin.close()
+        if self.receiver is not None:
+            self.receiver.close()
         self.storage.cleanup()

@@ -8,6 +8,8 @@ from tkinter import ttk
 
 import pymupdf
 
+from .ui_helpers import page_number, result_notice
+
 
 class PageViewer:
     def __init__(self, owner, source=0, *, fullscreen=True):
@@ -24,8 +26,11 @@ class PageViewer:
         self.window.minsize(860, 500)
         toolbar = ttk.Frame(self.window, padding=12)
         toolbar.pack(fill="x")
-        ttk.Radiobutton(toolbar, text="Original", variable=self.source, value=0, command=self.render).pack(side="left")
-        self.output_button = ttk.Radiobutton(toolbar, text="Output", variable=self.source, value=1, command=self.render)
+        style = ttk.Style(self.window)
+        style.configure("Source.TRadiobutton", padding=(12, 8), font=("Helvetica Neue", 12, "bold"))
+        style.map("Source.TRadiobutton", background=[("selected", "#123a56")], foreground=[("disabled", "#7a8998"), ("selected", "white")])
+        ttk.Radiobutton(toolbar, style="Source.TRadiobutton", text="Original", variable=self.source, value=0, command=self.render).pack(side="left")
+        self.output_button = ttk.Radiobutton(toolbar, style="Source.TRadiobutton", text="Output", variable=self.source, value=1, command=self.render)
         self.output_button.pack(side="left", padx=(8, 24))
         self.output_button.configure(state="normal" if owner.output is not None else "disabled")
         for title, mode in (("Fit page", "page"), ("Fit width", "width")):
@@ -35,11 +40,20 @@ class PageViewer:
         self.zoom_label.pack(side="left")
         ttk.Button(toolbar, text="+", width=3, command=lambda: self.zoom(1.25)).pack(side="left", padx=3)
         ttk.Button(toolbar, text="Close · Esc", command=self.close).pack(side="right")
+        self.source_heading = ttk.Label(self.window, font=("Helvetica Neue", 16, "bold"), padding=(14, 8), wraplength=750)
+        self.source_heading.pack(fill="x")
+        self.notice = tk.Label(self.window, anchor="w", justify="left", background="#fff4d6", foreground="#784c00", padx=14, pady=8, wraplength=900)
+        self.notice.pack(fill="x")
         footer = ttk.Frame(self.window, padding=12)
         footer.pack(side="bottom", fill="x")
         self.previous = ttk.Button(footer, text="‹ Previous", command=lambda: self.go(-1))
         self.previous.pack(side="left")
-        self.page_label = ttk.Label(footer, width=18, anchor="center")
+        ttk.Label(footer, text="Page").pack(side="left", padx=(12, 4))
+        self.page_input = tk.StringVar(value=str(owner.page + 1))
+        self.page_entry = ttk.Entry(footer, textvariable=self.page_input, width=5, justify="center")
+        self.page_entry.pack(side="left")
+        self.page_entry.bind("<Return>", self.jump_page)
+        self.page_label = ttk.Label(footer, width=10, anchor="center")
         self.page_label.pack(side="left")
         self.next = ttk.Button(footer, text="Next ›", command=lambda: self.go(1))
         self.next.pack(side="left")
@@ -63,11 +77,11 @@ class PageViewer:
         self.canvas.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-3, "units"))
         self.canvas.bind("<Button-5>", lambda e: self.canvas.yview_scroll(3, "units"))
         self.window.bind("<Escape>", lambda e: self.close())
-        self.window.bind("<Left>", lambda e: self.go(-1))
-        self.window.bind("<Right>", lambda e: self.go(1))
-        self.window.bind("<plus>", lambda e: self.zoom(1.25))
-        self.window.bind("<equal>", lambda e: self.zoom(1.25))
-        self.window.bind("<minus>", lambda e: self.zoom(1 / 1.25))
+        self.window.bind("<Left>", lambda e: None if e.widget is self.page_entry else self.go(-1))
+        self.window.bind("<Right>", lambda e: None if e.widget is self.page_entry else self.go(1))
+        self.window.bind("<plus>", lambda e: None if e.widget is self.page_entry else self.zoom(1.25))
+        self.window.bind("<equal>", lambda e: None if e.widget is self.page_entry else self.zoom(1.25))
+        self.window.bind("<minus>", lambda e: None if e.widget is self.page_entry else self.zoom(1 / 1.25))
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         if fullscreen:
             self.window.attributes("-fullscreen", True)
@@ -96,6 +110,12 @@ class PageViewer:
         (self.canvas.xview_scroll if horizontal else self.canvas.yview_scroll)(units, "units")
         return "break"
 
+    def jump_page(self, event=None):
+        self.owner.page = page_number(self.page_input.get(), len(self.owner.original), self.owner.page)
+        self.render(reset=True)
+        self.canvas.focus_set()
+        return "break"
+
     def go(self, step):
         page = min(max(self.owner.page + step, 0), len(self.owner.original) - 1)
         if page != self.owner.page:
@@ -113,6 +133,10 @@ class PageViewer:
         if document is None:
             self.source.set(0)
             document = self.owner.original
+        self.source_heading.configure(text=("OUTPUT PREVIEW" if self.source.get() else "ORIGINAL PDF") + "  ·  " + self.owner.path.name)
+        self.window.title(("Output preview" if self.source.get() else "Original PDF") + " — Preview Cleaner")
+        notice, warning = result_notice(self.owner.result.report if self.owner.result else None, self.owner.page)
+        self.notice.configure(text=notice if warning else "", background="#fff4d6" if warning else self.owner.colors["surface"])
         page = document[self.owner.page]
         width, height = max(100, self.canvas.winfo_width()), max(100, self.canvas.winfo_height())
         if self.mode == "page":
@@ -138,7 +162,8 @@ class PageViewer:
         self.canvas.xview_moveto(0 if reset else x)
         self.canvas.yview_moveto(0 if reset else y)
         self.zoom_label.configure(text=f"{self.scale:.0%}")
-        self.page_label.configure(text=f"Page {self.owner.page + 1} of {len(document)}")
+        self.page_label.configure(text=f"of {len(document)}")
+        self.page_input.set(str(self.owner.page + 1))
         self.previous.configure(state="normal" if self.owner.page > 0 else "disabled")
         self.next.configure(state="normal" if self.owner.page < len(document) - 1 else "disabled")
 

@@ -13,6 +13,7 @@ from tkinterdnd2 import COPY, DND_FILES, REFUSE_DROP, TkinterDnD
 from .core import CleanerError, PasswordNeeded, open_pdf, printing_allowed, read_pdf, save_new
 from .jobs import CleaningJob
 from .viewer import PageViewer
+from .ui_helpers import format_pdf_date, page_number, result_notice
 
 
 class CleanerWindow:
@@ -35,6 +36,8 @@ class CleanerWindow:
         self.remove_overlays = tk.BooleanVar(value=True)
         self.status = tk.StringVar(value="Open or drop a PDF to begin. Your original file will not be overwritten.")
         self.page_label = tk.StringVar(value="No document")
+        self.page_input = tk.StringVar(value="")
+        self.notice_text = tk.StringVar(value="")
         self.security_status = tk.StringVar(value="Source printing: no document. Output printing: always enabled.")
 
         self.render_id = None
@@ -77,7 +80,7 @@ class CleanerWindow:
         header.pack(fill="x")
         ttk.Label(header, text="Preview Cleaner", style="Title.TLabel").pack(side="left")
         ttk.Label(header, text="On-device · Original stays unchanged", style="Muted.TLabel").pack(side="left", padx=22)
-        self.save_button = ttk.Button(header, text="Save new PDF…", command=self.save, state="disabled", style="Primary.TButton")
+        self.save_button = ttk.Button(header, text="Save printable copy…", command=self.save, state="disabled", style="Primary.TButton")
         self.save_button.pack(side="right")
         ttk.Button(header, text="Open PDF…", command=self.choose_file).pack(side="right", padx=10)
         ttk.Separator(self.root).pack(fill="x")
@@ -105,13 +108,18 @@ class CleanerWindow:
         tk.Label(security, textvariable=self.security_status, background="#edf5f5", foreground=colors["ink"], wraplength=222, justify="left", anchor="w", font=("Helvetica Neue", 12)).pack(fill="x", pady=(10, 0))
         self.process_button = ttk.Button(sidebar, text="Analyze & preview", command=self.process, state="disabled", style="Primary.TButton")
         self.process_button.pack(fill="x", pady=(18, 0))
-        ttk.Label(sidebar, text="Use only documents you own or are authorized to modify. Scanned and unsupported marks stay unchanged.", style="Muted.TLabel", wraplength=250).pack(side="bottom", anchor="w", pady=(12, 0))
+        ttk.Label(sidebar, text="For documents you own or are authorized to modify.", style="Muted.TLabel", wraplength=250).pack(side="bottom", anchor="w", pady=(12, 0))
         ttk.Separator(body, orient="vertical").pack(side="left", fill="y")
         workspace = ttk.Frame(body, padding=(20, 18))
         workspace.pack(side="left", fill="both", expand=True)
         ttk.Label(workspace, text="Compare pages", font=("Helvetica Neue", 17, "bold")).pack(anchor="w")
         ttk.Label(workspace, text="Review the printable copy before saving.", style="Muted.TLabel").pack(anchor="w", pady=(4, 18))
+        self.notice = tk.Label(workspace, textvariable=self.notice_text, anchor="w", justify="left", padx=12, pady=10,
+                               background="#fff4d6", foreground="#784c00", wraplength=650, font=("Helvetica Neue", 12))
+        self.notice.pack(fill="x", pady=(0, 12))
+        self.notice.pack_forget()
         viewer = ttk.Frame(workspace)
+        self.preview_workspace = viewer
         viewer.pack(fill="both", expand=True)
         viewer.columnconfigure((0, 1), weight=1, uniform="preview")
         viewer.rowconfigure(0, weight=1)
@@ -146,7 +154,12 @@ class CleanerWindow:
         nav.pack(fill="x")
         self.previous_button = ttk.Button(nav, text="‹ Previous", command=lambda: self.go(-1), state="disabled")
         self.previous_button.pack(side="left")
-        ttk.Label(nav, textvariable=self.page_label).pack(side="left", padx=14)
+        ttk.Label(nav, text="Page").pack(side="left", padx=(12, 4))
+        self.page_entry = ttk.Entry(nav, textvariable=self.page_input, width=5, justify="center", state="disabled")
+        self.page_entry.pack(side="left")
+        self.page_entry.bind("<Return>", self.jump_page)
+        self.page_entry.bind("<Escape>", lambda event: self.page_input.set(str(self.page + 1)))
+        ttk.Label(nav, textvariable=self.page_label).pack(side="left", padx=(4, 12))
         self.next_button = ttk.Button(nav, text="Next ›", command=lambda: self.go(1), state="disabled")
         self.next_button.pack(side="left")
         ttk.Button(nav, text="Fit page", command=self.render).pack(side="right")
@@ -223,19 +236,23 @@ class CleanerWindow:
         metadata = doc.metadata or {}
         first = doc[0].rect
         quality = "High-quality printing allowed" if printing_allowed(doc) else ("Low-quality printing only" if doc.permissions & pymupdf.PDF_PERM_PRINT else "Printing blocked")
-        fields = [("FILE", self.path.name), ("LOCATION", str(self.path.resolve())),
+        fields = [("DOCUMENT", None), ("FILE", self.path.name), ("LOCATION", str(self.path.resolve())),
                   ("SIZE", f"{len(self.data):,} bytes ({len(self.data) / 1024 / 1024:.2f} MB)"),
                   ("PAGES", str(len(doc))), ("FIRST PAGE SIZE", f"{first.width:g} × {first.height:g} pt"),
-                  ("FORMAT", metadata.get("format")), ("TITLE", metadata.get("title")),
+                  ("FORMAT", metadata.get("format")), ("PRODUCER & METADATA", None), ("TITLE", metadata.get("title")),
                   ("AUTHOR", metadata.get("author")), ("CREATOR", metadata.get("creator")),
-                  ("PRODUCER", metadata.get("producer")), ("CREATED (PDF METADATA)", metadata.get("creationDate")),
-                  ("MODIFIED (PDF METADATA)", metadata.get("modDate")),
-                  ("ENCRYPTION", metadata.get("encryption") or "None"),
+                  ("PRODUCER", metadata.get("producer")), ("CREATED (PDF METADATA)", format_pdf_date(metadata.get("creationDate"))),
+                  ("MODIFIED (PDF METADATA)", format_pdf_date(metadata.get("modDate"))),
+                  ("SECURITY & EXPORT", None), ("ENCRYPTION", metadata.get("encryption") or "None"),
                   ("OPENING PASSWORD", "Required" if doc.needs_pass else "Not required"),
                   ("SOURCE PRINTING", quality),
                   ("EXPORT SECURITY", "Existing password and security retained." if printing_allowed(doc) else
                    "Opening password, encryption and other restrictions removed to enable high-quality printing.")]
+        details.tag_configure("section", font=("Helvetica Neue", 16, "bold"), foreground=self.colors["ink"], spacing1=12, spacing3=10)
         for label, value in fields:
+            if label in ("DOCUMENT", "PRODUCER & METADATA", "SECURITY & EXPORT"):
+                details.insert("end", label + "\n", "section")
+                continue
             details.insert("end", label + "\n", "label")
             details.insert("end", str(value or "Not specified") + "\n\n")
         details.configure(state="disabled")
@@ -325,10 +342,10 @@ class CleanerWindow:
             self.report_button.configure(state="disabled")
             self.status.set("PDF loaded. Choose Analyze & preview before saving.")
             if printing_allowed(new_doc):
-                self.security_status.set("Source: high-quality printing allowed.\n\nExport: printing enabled; existing password and security retained.")
+                self.security_status.set("Source PDF: high-quality printing allowed.\n\nNew copy: printing enabled; existing password and security retained.")
             else:
                 quality = "low-quality printing only" if new_doc.permissions & pymupdf.PDF_PERM_PRINT else "printing blocked"
-                self.security_status.set(f"Source: {quality}.\n\nExport: high-quality printing enabled; opening password, encryption and other restrictions removed.")
+                self.security_status.set(f"Source PDF: {quality}.\n\nNew copy: high-quality printing enabled; opening password, encryption and other restrictions removed.")
             self.note("Supports large diagonal text labels in separate PDF text objects. Scanned/image watermarks are left unchanged.")
             self.render()
         except Exception as exc:
@@ -408,13 +425,10 @@ class CleanerWindow:
             self.output_label.set("Printable · Review unchanged marks" if report["unsupported_pages"] else "Printable · Ready to review")
             self.save_button.configure(state="normal")
             self.report_button.configure(state="normal")
-            self.status.set(f"Printable copy ready. Removed {changed} overlay(s) on {report['pages_changed']} of {report['page_count']} pages. Review before export.")
+            outcome = "Review needed: unsupported content remains." if report["unsupported_pages"] else "Printable copy ready."
+            self.status.set(f"{outcome} Removed {changed} overlay(s) on {report['pages_changed']} of {report['page_count']} pages.")
             self.note(report["security_note"] + "\n" + "\n".join(f"Page {r['page']}: {r['status']} — {r['reason']}" for r in report["pages"]))
             self.render()
-            if report["unsupported_pages"]:
-                messagebox.showwarning("Some overlays were left unchanged", "Unsupported overlays on pages: " + ", ".join(map(str, report["unsupported_pages"])) + ". Printing is enabled, but do not assume all marks were removed.")
-            elif not changed and self.remove_overlays.get():
-                messagebox.showinfo("Printable copy ready", "No supported text overlay was removed. You can still save a printable copy. Unsupported marks may remain; review the preview and report.")
         except Exception as exc:
             self.status.set("Processing failed. No file has been saved.")
             messagebox.showerror("Could not process PDF", str(exc))
@@ -438,10 +452,28 @@ class CleanerWindow:
             image = tk.PhotoImage(data=base64.b64encode(pixmap.tobytes("png")))
             label.configure(image=image, text="")
             self.images.append(image)
-        self.page_label.set(f"Page {self.page + 1} of {len(self.original)}" if self.original is not None else "No document")
+        self.page_label.set(f"of {len(self.original)}" if self.original is not None else "of —")
+        self.page_input.set(str(self.page + 1) if self.original is not None else "")
+        self.page_entry.configure(state="normal" if self.original is not None else "disabled")
+        self.update_notice()
 
         self.previous_button.configure(state="normal" if self.original is not None and self.page > 0 else "disabled")
         self.next_button.configure(state="normal" if self.original is not None and self.page < len(self.original) - 1 else "disabled")
+
+    def update_notice(self):
+        text, warning = result_notice(self.result.report if self.result else None, self.page)
+        self.notice_text.set(text)
+        if text:
+            self.notice.configure(background="#fff4d6" if warning else "#edf5f5", foreground="#784c00" if warning else "#0b636d")
+            self.notice.pack(before=self.preview_workspace, fill="x", pady=(0, 12))
+        else:
+            self.notice.pack_forget()
+
+    def jump_page(self, event=None):
+        if self.original is not None:
+            self.page = page_number(self.page_input.get(), len(self.original), self.page)
+            self.render()
+        return "break"
 
     def go(self, step: int):
         if self.original is not None:
@@ -452,7 +484,7 @@ class CleanerWindow:
         if self.result is None:
             return
         path = filedialog.asksaveasfilename(
-            title="Save a new PDF (existing files are never replaced)",
+            title="Save printable copy (original stays unchanged)",
             initialdir=str(self.path.parent), initialfile=f"{self.path.stem}_printable.pdf",
             defaultextension=".pdf", filetypes=[("PDF document", "*.pdf")],
         )

@@ -153,3 +153,17 @@ def test_expanded_view_closes_before_document_invalidation(window, tmp_path):
     window.page_viewer = viewer
     window.load_path(source)
     assert viewer.closed and window.page_viewer is None
+
+
+def test_mixed_result_warning_persists_and_invalidates(window, tmp_path, monkeypatch):
+    from preview_cleaner.core import clean
+    source = tmp_path / 'nested.pdf'
+    source.write_bytes((__import__('pathlib').Path(__file__).parent / 'fixtures/mupdf-nested-form.pdf').read_bytes())
+    window.load_path(source)
+    monkeypatch.setattr(gui.messagebox, 'showwarning', lambda *a, **k: pytest.fail('Blocking result warning'))
+    window.show_result(clean(source.read_bytes()))
+    assert window.result.report['unsupported_pages']
+    assert 'unsupported content' in window.notice_text.get()
+    assert str(window.save_button['state']) == 'normal'
+    window.target.set('Draft')
+    assert window.notice_text.get() == ''

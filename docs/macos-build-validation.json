@@ -1,6 +1,6 @@
 {
-  "built_at_utc": "2026-09-30T04:15:44.589315+00:00",
-  "app_version": "0.6.0",
+  "built_at_utc": "2026-10-01T04:22:23.563056+00:00",
+  "app_version": "0.7.1",
   "architecture": "arm64",
   "macos_tested": "26.6.2",
   "minimum_macos": "26.0",
@@ -9,10 +9,10 @@
   "dependency_lock": "requirements-build-macos.txt",
   "app": "dist/PreviewCleaner.app",
   "archive": "dist/PreviewCleaner-macOS-arm64.zip",
-  "archive_bytes": 35917334,
-  "archive_sha256": "4c7aece73088b0826879990e7ace0a0b556eb5d328ed0c1af784626f8f252e53",
+  "archive_bytes": 35924295,
+  "archive_sha256": "cf64953db460812316dc2dab2dfde34dd9e688296d277910a6c0e9662bf9ef3e",
   "automated_tests": {
-    "passed": 77,
+    "passed": 93,
     "failed": 0,
     "warnings": 5
   },
@@ -47,7 +47,7 @@
   ],
   "code_signature": "ad-hoc; codesign --verify --deep --strict passed",
   "packaged_self_test": {
-    "app_version": "0.6.0",
+    "app_version": "0.7.1",
     "macos": "26.6.2",
     "architecture": "arm64",
     "checks": [
@@ -58,9 +58,16 @@
       "overlay removal and text preservation",
       "printable output",
       "page rendering",
-      "worker cancellation and temporary-file cleanup"
+      "50 headless worker starts/cancellations after Tk initialization"
     ],
-    "passed": true
+    "passed": true,
+    "worker_cancellation_stress": {
+      "iterations": 50,
+      "exit_codes": {
+        "-15": 50
+      },
+      "unexpected_exits": 0
+    }
   },
   "dependency_audit": {
     "mach_o_files_checked": 63,
@@ -74,9 +81,44 @@
     "Keyboard open, PDF details and analysis exercised with synthetic fixture.",
     "Automatic tests cover read-only details, closing details on document replacement, disabled boundary navigation and print-only field state.",
     "0.6.0 packaged app: double-click enters full screen, keyboard zoom changes 96% to 121%, Escape returns to comparison.",
-    "Viewer regression tests cover fit width, navigation, retained scale when switching sources, unavailable output and cleanup on document/option replacement."
+    "Viewer regression tests cover fit width, navigation, retained scale when switching sources, unavailable output and cleanup on document/option replacement.",
+    "0.7.0 packaged app: persistent unsupported-content banner and enabled printable export visually verified using synthetic nested-Form fixture.",
+    "Full-screen source selector, heading, warning and page input visually verified; Escape returned to workspace.",
+    "Page entry, date formatting and persistent-warning regression tests pass."
   ],
   "validation_notes": [
-    "77 tests passed; intermittent child-process startup segmentation-fault output recurred during the immediate-timeout test. Packaged self-test passed. Worker-startup stability remains a separate known issue."
-  ]
+    "Worker-startup issue reproduced and fixed in 0.7.1. macOS native posix_spawn avoids inherited Cocoa state; no crash output in regression suite or source/packaged stress runs. Clean-Mac signing/distribution acceptance remains pending."
+  ],
+  "worker_startup_fix": {
+    "baseline": {
+      "iterations": 100,
+      "expected_terminations": 93,
+      "SIGABRT": 7,
+      "diagnostic": "objc NSPanel initialize unsafe after fork"
+    },
+    "fixed_source": {
+      "iterations": 500,
+      "expected_terminations": 500,
+      "unexpected_exits": 0,
+      "crash_markers": 0
+    },
+    "fixed_packaged": {
+      "iterations": 50,
+      "exit_codes": {
+        "-15": 50
+      },
+      "unexpected_exits": 0
+    },
+    "native_spawn_path_verified": true,
+    "password_transport": "stdin pipe; not argv or configuration files",
+    "regressions": [
+      "launch failure cleans storage",
+      "normal completion exits successfully",
+      "password-protected worker input",
+      "progress",
+      "cancellation/restart",
+      "timeout",
+      "unexpected process exit"
+    ]
+  }
 }

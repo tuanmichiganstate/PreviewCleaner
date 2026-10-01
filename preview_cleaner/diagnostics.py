@@ -58,11 +58,20 @@ def run(report_path):
             assert output[0].get_pixmap().width > 0
         report["checks"].extend(["spawned PDF worker", "responsive Tk event loop", "password authentication",
                                   "overlay removal and text preservation", "printable output", "page rendering"])
-        job = CleaningJob(source, "Preview", "synthetic-test", True)
-        folder = job.folder
-        job.close()
-        assert not folder.exists()
-        report["checks"].append("worker cancellation and temporary-file cleanup")
+        import signal
+        exits = {}
+        for index in range(50):
+            job = CleaningJob(source, "Preview", "synthetic-test", True)
+            folder = job.folder
+            time.sleep((0, 0.002, 0.02)[index % 3])
+            job.close()
+            code = job.process.returncode
+            expected = (0, 1) if platform.system() == "Windows" else (0, -signal.SIGTERM, -signal.SIGKILL)
+            assert code in expected, f"Worker startup/cancellation crashed: {code}"
+            assert not folder.exists()
+            exits[str(code)] = exits.get(str(code), 0) + 1
+        report["worker_cancellation_stress"] = {"iterations": 50, "exit_codes": exits, "unexpected_exits": 0}
+        report["checks"].append("50 headless worker starts/cancellations after Tk initialization")
         report["passed"] = True
     except Exception as exc:
         report["error"] = str(exc)
