@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import math
+import sys
 import tkinter as tk
 from tkinter import ttk
 
@@ -20,6 +21,7 @@ class PageViewer:
         self.pending = None
         self.image = None
         self.closed = False
+        self.maximize_on_open = fullscreen and sys.platform == "darwin"
         self.window = tk.Toplevel(owner.root)
         self.window.title("Page viewer — Preview Cleaner")
         self.window.geometry("1100x800")
@@ -84,11 +86,32 @@ class PageViewer:
         self.window.bind("<minus>", lambda e: None if e.widget is self.page_entry else self.zoom(1 / 1.25))
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         if fullscreen:
-            self.window.attributes("-fullscreen", True)
-        self.window.after_idle(self.canvas.focus_set)
+            if sys.platform == "darwin":
+                # Tk 9's native fullscreen exit can outlive destroy(): Cocoa
+                # calls resetTkLayerBitmapContext on an already released context.
+                # Maximize a normal window instead: no asynchronous Space
+                # transition, with native focus, close controls and screen bounds.
+                # Apply after mapping; Tk ignores zoom on an unmapped window.
+                self.window.bind("<Map>", self.maximize_mapped_window, add="+")
+            else:
+                self.window.attributes("-fullscreen", True)
+        self.focus_pending = self.window.after_idle(self.focus_canvas)
         self.schedule()
 
+    def focus_canvas(self):
+        self.focus_pending = None
+        if not self.closed:
+            self.window.lift()
+            self.canvas.focus_set()
+
+    def maximize_mapped_window(self, event):
+        if event.widget is self.window and self.maximize_on_open and not self.closed:
+            self.maximize_on_open = False
+            self.window.state("zoomed")
+
     def schedule(self, event=None):
+        if self.closed:
+            return
         if self.pending is not None:
             self.window.after_cancel(self.pending)
         self.pending = self.window.after(120, self.render)
@@ -171,6 +194,9 @@ class PageViewer:
         if self.closed:
             return
         self.closed = True
+        if self.focus_pending is not None:
+            self.window.after_cancel(self.focus_pending)
+            self.focus_pending = None
         if self.pending is not None:
             self.window.after_cancel(self.pending)
             self.pending = None

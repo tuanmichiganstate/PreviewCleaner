@@ -51,10 +51,10 @@ app = BUNDLE(
     name='PreviewCleaner.app',
     icon='assets/PreviewCleaner.icns',
     bundle_identifier='local.previewcleaner.app',
-    version='0.7.1',
+    version='0.7.3',
     info_plist={
         'CFBundleDisplayName': 'Preview Cleaner',
-        'CFBundleShortVersionString': '0.7.1',
+        'CFBundleShortVersionString': '0.7.3',
         'LSMinimumSystemVersion': '26.0',
         'NSHighResolutionCapable': True,
     },

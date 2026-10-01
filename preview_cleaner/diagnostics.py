@@ -72,6 +72,36 @@ def run(report_path):
             exits[str(code)] = exits.get(str(code), 0) + 1
         report["worker_cancellation_stress"] = {"iterations": 50, "exit_codes": exits, "unexpected_exits": 0}
         report["checks"].append("50 headless worker starts/cancellations after Tk initialization")
+        if platform.system() == "Darwin":
+            import tempfile
+            from .gui import CleanerWindow
+
+            app = CleanerWindow(root)
+            callback_errors = []
+            root.report_callback_exception = lambda *args: callback_errors.append(str(args[1]))
+            with tempfile.TemporaryDirectory(prefix="preview-cleaner-viewer-") as folder:
+                path = Path(folder) / "Synthetic viewer.pdf"
+                path.write_bytes(result.pdf_bytes)
+                try:
+                    app.load_path(path)
+                    for index in range(20):
+                        app.expand_page()
+                        viewer = app.page_viewer
+                        assert not viewer.window.attributes("-fullscreen")
+                        assert not viewer.window.overrideredirect()
+                        if index % 2:
+                            root.update()
+                            assert viewer.window.state() == "zoomed"
+                            viewer.render()
+                            assert viewer.image is not None
+                        viewer.close()
+                        root.update()
+                        assert app.page_viewer is None
+                    assert not callback_errors, callback_errors
+                finally:
+                    app.close_documents()
+            report["viewer_lifecycle_stress"] = {"iterations": 20, "native_fullscreen": False}
+            report["checks"].append("20 expanded viewer open/render/close cycles without native fullscreen")
         report["passed"] = True
     except Exception as exc:
         report["error"] = str(exc)

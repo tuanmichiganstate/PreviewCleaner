@@ -1,4 +1,5 @@
 import time
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +19,33 @@ def window(monkeypatch):
         monkeypatch.setattr(gui.messagebox, name, lambda *a, **k: None)
     yield app
     app.close()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Mac fullscreen lifecycle regression")
+def test_expanded_viewer_closes_without_native_fullscreen_transition(window, tmp_path):
+    source = tmp_path / "viewer.pdf"
+    source.write_bytes(make_pdf())
+    window.load_path(source)
+    errors = []
+    window.root.report_callback_exception = lambda *args: errors.append(args)
+    for index in range(20):
+        window.expand_page()
+        viewer = window.page_viewer
+        assert not viewer.window.attributes("-fullscreen")
+        assert not viewer.window.overrideredirect()
+        if index % 2:
+            window.root.update()
+            viewer.render()
+            assert viewer.image is not None
+            assert viewer.window.state() == "zoomed"
+        # Also cover closing before the scheduled focus/render callbacks run.
+        viewer.close()
+        viewer.close()
+        window.root.update()
+        assert window.page_viewer is None
+        assert viewer.pending is None and viewer.focus_pending is None
+        assert not viewer.window.winfo_exists()
+    assert not errors
 
 
 def test_gui_worker_keeps_event_loop_running(window, tmp_path):
@@ -167,3 +195,26 @@ def test_mixed_result_warning_persists_and_invalidates(window, tmp_path, monkeyp
     assert str(window.save_button['state']) == 'normal'
     window.target.set('Draft')
     assert window.notice_text.get() == ''
+
+
+def test_long_sidebar_content_scrolls_without_clipping_actions(window, tmp_path):
+    from types import SimpleNamespace
+    source = tmp_path / ('Long document name ' * 9 + '.pdf')
+    with open_pdf(make_pdf()) as doc:
+        source.write_bytes(doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                                      owner_pw='owner-test', permissions=0))
+    window.root.deiconify()
+    window.root.geometry('1000x780')
+    window.load_path(source)
+    window.root.update()
+    note = window.authorization_note
+    assert note.winfo_height() >= note.winfo_reqheight()
+    assert note.winfo_rooty() + note.winfo_height() <= window.root.winfo_rooty() + window.root.winfo_height()
+    assert window.process_button.winfo_height() >= window.process_button.winfo_reqheight()
+    assert window.sidebar_content.winfo_height() > window.sidebar_canvas.winfo_height()
+    window.sidebar_canvas.yview_moveto(1)
+    window.root.update()
+    assert window.sidebar_canvas.yview()[1] == 1.0
+    window.reveal_sidebar_control(SimpleNamespace(widget=window.pdf_details_button))
+    window.root.update()
+    assert window.sidebar_canvas.canvasy(0) <= window.pdf_details_button.winfo_rooty() - window.sidebar_content.winfo_rooty()

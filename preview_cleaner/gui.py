@@ -86,9 +86,29 @@ class CleanerWindow:
         ttk.Separator(self.root).pack(fill="x")
         body = ttk.Frame(self.root)
         body.pack(fill="both", expand=True)
-        sidebar = ttk.Frame(body, width=292, padding=20)
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
+        sidebar_shell = ttk.Frame(body, width=306)
+        sidebar_shell.pack(side="left", fill="y")
+        sidebar_shell.pack_propagate(False)
+        # Reserve the action and complete authorization note before allocating the
+        # scrollable options area. Long filenames/security messages cannot clip them.
+        sidebar_footer = ttk.Frame(sidebar_shell, padding=(20, 12, 20, 16))
+        sidebar_footer.pack(side="bottom", fill="x")
+        self.process_button = ttk.Button(sidebar_footer, text="Analyze & preview", command=self.process, state="disabled", style="Primary.TButton")
+        self.process_button.pack(fill="x")
+        self.authorization_note = ttk.Label(sidebar_footer, text="For documents you own or are authorized to modify.", style="Muted.TLabel", wraplength=266)
+        self.authorization_note.pack(fill="x", pady=(10, 0))
+        sidebar_viewport = ttk.Frame(sidebar_shell)
+        sidebar_viewport.pack(fill="both", expand=True)
+        self.sidebar_canvas = tk.Canvas(sidebar_viewport, background=colors["surface"], highlightthickness=0, width=1)
+        sidebar_scrollbar = ttk.Scrollbar(sidebar_viewport, orient="vertical", command=self.sidebar_canvas.yview)
+        sidebar_scrollbar.pack(side="right", fill="y")
+        self.sidebar_canvas.pack(side="left", fill="both", expand=True)
+        self.sidebar_canvas.configure(yscrollcommand=sidebar_scrollbar.set)
+        sidebar = ttk.Frame(self.sidebar_canvas, padding=(20, 20, 20, 12))
+        self.sidebar_content = sidebar
+        self.sidebar_item = self.sidebar_canvas.create_window(0, 0, window=sidebar, anchor="nw")
+        self.sidebar_canvas.bind("<Configure>", lambda event: self.sidebar_canvas.itemconfigure(self.sidebar_item, width=event.width))
+        sidebar.bind("<Configure>", lambda event: self.sidebar_canvas.configure(scrollregion=self.sidebar_canvas.bbox("all")))
         ttk.Label(sidebar, text="DOCUMENT", style="Section.TLabel").pack(anchor="w")
         self.path_label = ttk.Label(sidebar, text="Open a PDF to begin", wraplength=250, font=("Helvetica Neue", 14, "bold"))
         self.path_label.pack(anchor="w", pady=(10, 5))
@@ -106,9 +126,8 @@ class CleanerWindow:
         security.pack(fill="x")
         tk.Label(security, text="Printing enabled · Always on", background="#edf5f5", foreground="#0b636d", font=("Helvetica Neue", 12, "bold"), anchor="w").pack(fill="x")
         tk.Label(security, textvariable=self.security_status, background="#edf5f5", foreground=colors["ink"], wraplength=222, justify="left", anchor="w", font=("Helvetica Neue", 12)).pack(fill="x", pady=(10, 0))
-        self.process_button = ttk.Button(sidebar, text="Analyze & preview", command=self.process, state="disabled", style="Primary.TButton")
-        self.process_button.pack(fill="x", pady=(18, 0))
-        ttk.Label(sidebar, text="For documents you own or are authorized to modify.", style="Muted.TLabel", wraplength=250).pack(side="bottom", anchor="w", pady=(12, 0))
+        self.bind_sidebar_scroll(sidebar)
+        self.sidebar_canvas.bind("<MouseWheel>", self.scroll_sidebar)
         ttk.Separator(body, orient="vertical").pack(side="left", fill="y")
         workspace = ttk.Frame(body, padding=(20, 18))
         workspace.pack(side="left", fill="both", expand=True)
@@ -191,6 +210,35 @@ class CleanerWindow:
         self.root.bind("<Command-s>", lambda event: self.save())
         self.note("Open a PDF, choose your options, then analyze. Verification results appear here.")
         self.render()
+
+    def scroll_sidebar(self, event):
+        if self.sidebar_canvas.yview() == (0.0, 1.0):
+            return "break"
+        delta = getattr(event, "delta", 0)
+        units = (-1 if delta > 0 else 1) if abs(delta) < 120 else -int(delta / 120)
+        if getattr(event, "num", None) in (4, 5):
+            units = -3 if event.num == 4 else 3
+        self.sidebar_canvas.yview_scroll(units, "units")
+        return "break"
+
+    def bind_sidebar_scroll(self, widget):
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self.scroll_sidebar, add="+")
+        widget.bind("<FocusIn>", self.reveal_sidebar_control, add="+")
+        for child in widget.winfo_children():
+            self.bind_sidebar_scroll(child)
+
+    def reveal_sidebar_control(self, event):
+        canvas = self.sidebar_canvas
+        top = event.widget.winfo_rooty() - self.sidebar_content.winfo_rooty()
+        bottom = top + event.widget.winfo_height()
+        visible_top = canvas.canvasy(0)
+        height = canvas.winfo_height()
+        total = max(self.sidebar_content.winfo_height(), 1)
+        if top < visible_top:
+            canvas.yview_moveto(max(0, top - 8) / total)
+        elif bottom > visible_top + height:
+            canvas.yview_moveto(max(0, bottom - height + 8) / total)
 
     def expand_page(self, source=0):
         if (self.output if source else self.original) is None:

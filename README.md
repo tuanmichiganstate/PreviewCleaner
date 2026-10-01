@@ -1,8 +1,10 @@
-# Preview Cleaner — working source prototype 0.7.1
+# Preview Cleaner — working source prototype 0.7.3
 
 A small, local desktop app for removing **supported separate PDF text overlays**, such as the large diagonal `Preview` label in the supplied example. It has a desktop interface and a command-line interface.
 
 **Status:** tested processing core and a packaged macOS app for Apple Silicon on macOS 26 or later. The app was built and smoke-tested on macOS 26.6.2. Windows packaging and testing on other Macs remain to be done. Only use documents you own or are authorized to modify.
+
+On macOS, the expanded page viewer uses a maximized window to avoid a Tk crash during native fullscreen exit. Close or Esc returns to the comparison.
 
 ## What is included
 
@@ -111,7 +113,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The current suite passes 93 automated tests on macOS. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, printable copies, dropped-path handling, worker crashes/timeouts/cancellation, and the Tk event loop. The GUI tests require a graphical desktop with Tkinter. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
+The current suite passes 95 automated tests on macOS. Tests cover supported encodings, non-target text, phrases, ambiguity, mixed text objects, inline images, comments, clipping mode, nested forms, raster pages, password handling, signatures, no-overwrite behavior, repeat processing, printable copies, dropped-path handling, worker crashes/timeouts/cancellation, and the Tk event loop. The GUI tests require a graphical desktop with Tkinter. Print-only regression fixtures verify unchanged content streams and rendered pixels with AES-128/AES-256 security and both blocked and low-quality-only printing.
 
 `tests/fixtures` contains only synthetic PDFs from ReportLab, fpdf2, and PyMuPDF, plus a malformed file. Supported fixtures are checked for unchanged graphics and exact rendered pixels outside the removed label. Unsupported fixtures must remain byte-identical. To regenerate the corpus, install `requirements-fixtures.txt` and run `python scripts/generate_fixtures.py`; fixture-generator dependencies are not bundled into the app.
 

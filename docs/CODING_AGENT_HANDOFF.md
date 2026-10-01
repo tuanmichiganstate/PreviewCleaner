@@ -1,4 +1,4 @@
-# Coding-agent handoff — Preview Cleaner 0.7.1
+# Coding-agent handoff — Preview Cleaner 0.7.3
 
 ## Objective
 
@@ -6,7 +6,7 @@ Turn the supplied working source prototype into a reliable local macOS/Windows d
 
 ## Implemented baseline
 
-`preview_cleaner/core.py` reads PDFs, inspects rendered text spans, parses top-level PDF text objects, applies byte-offset patches, enables printing, and verifies exported output. `gui.py` provides drag-and-drop, preview/navigation/export and JSON reporting; `jobs.py` launches `worker.py` in a fresh headless subprocess. On macOS, Popen uses posix_spawn (close_fds=False; all app-opened descriptors are non-inheritable) to avoid inherited Cocoa state. Do not reintroduce multiprocessing fork_exec startup or initialize Tk in worker.py. `__main__.py` is the CLI. The suite includes 93 automated cases and a synthetic multi-producer corpus. The frozen app has an offline `--self-test` diagnostic.
+`preview_cleaner/core.py` reads PDFs, inspects rendered text spans, parses top-level PDF text objects, applies byte-offset patches, enables printing, and verifies exported output. `gui.py` provides drag-and-drop, preview/navigation/export and JSON reporting; `jobs.py` launches `worker.py` in a fresh headless subprocess. On macOS, Popen uses posix_spawn (close_fds=False; all app-opened descriptors are non-inheritable) to avoid inherited Cocoa state. Do not reintroduce multiprocessing fork_exec startup or initialize Tk in worker.py. `__main__.py` is the CLI. The suite includes 95 automated cases and a synthetic multi-producer corpus. The frozen app has an offline `--self-test` diagnostic.
 
 The reference sample is a 12-page PDF whose page wrapper separately invokes the score Form XObject, draws a 150-pt diagonal `Preview` text object, then draws its edition footer. Only the target text-show operand is changed. Do not remove the entire page stream, Form XObject, font resource, gray content, or watermark bounding rectangle.
 
@@ -48,3 +48,5 @@ The UI uses Tkinter/tkdnd. Cleaning and verification run in a spawned worker pro
 ## Release gates
 
 Core regression suite passes; native Mac/Windows UI acceptance passes; supported fixtures have only expected visual changes; unsupported fixtures remain unchanged; no-overwrite and password/signature tests pass; packaging tested on clean machines; dependency license review completed; usage limitations are visible in the app.
+
+Mac viewer mitigation in 0.7.3: Expand maximizes a normal Toplevel after mapping instead of entering a native fullscreen Space. Avoid reintroducing immediate destruction of native fullscreen viewers; the reported Tk bitmap-context crash occurred during asynchronous fullscreen exit. See UI_DESIGN.md for scope and remaining native-fullscreen acceptance.
